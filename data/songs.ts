@@ -13,6 +13,7 @@ export type SongLink = {
 };
 
 export type SongPage = {
+  id?: string;
   slug: string;
   title: string;
   artist: string;
@@ -22,6 +23,7 @@ export type SongPage = {
   releaseDate?: string;
   canonicalUrl: string;
   shortUrl?: string;
+  published?: boolean;
   links: SongLink[];
   pixelEvents: { contentId: string; contentName: string; artistName: string };
   seo: { title: string; description: string; ogImage: string };
@@ -34,6 +36,7 @@ export const songs: SongPage[] = [{
   artworkUrl: "/artwork/watching-me.jpg",
   canonicalUrl: "https://go.cyniicalaesthetic.productions/watching-me",
   shortUrl: "https://go.cyniicalaesthetic.productions/watching-me",
+  published: true,
   pixelEvents: { contentId: "watching-me", contentName: "Watching Me", artistName: "Cyniical" },
   seo: {
     title: "Watching Me by Cyniical",

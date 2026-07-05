@@ -16,7 +16,17 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
   const [embedOpen, setEmbedOpen] = useState(false);
   const links = useMemo(() => song.links.filter((link) => link.enabled).sort((a, b) => a.order - b.order), [song.links]);
 
-  useEffect(() => { trackView(song); }, [song]);
+  useEffect(() => {
+    trackView(song);
+    const params = new URLSearchParams(window.location.search);
+    const payload = JSON.stringify({
+      eventType: "visit", songSlug: song.slug, referrer: document.referrer,
+      userAgent: navigator.userAgent, utmSource: params.get("utm_source"),
+      utmMedium: params.get("utm_medium"), utmCampaign: params.get("utm_campaign")
+    });
+    if (navigator.sendBeacon) navigator.sendBeacon("/api/visit", new Blob([payload], { type: "application/json" }));
+    else void fetch("/api/visit", { method: "POST", headers: { "content-type": "application/json" }, body: payload, keepalive: true });
+  }, [song]);
 
   const copyUrl = async (label = "Copy URL") => {
     if (await copyText(window.location.href)) {
@@ -35,9 +45,9 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
     <Background artworkUrl={song.backgroundImageUrl ?? song.artworkUrl} />
     <div className="content-wrap">
       <section className="hero-card">
-        <div className="artwork-wrap"><Image src={song.artworkUrl} alt={`${song.title} cover artwork`} width={900} height={900} priority /></div>
+        <div className="artwork-wrap"><Image src={song.artworkUrl} alt={`${song.title} cover artwork`} width={900} height={900} priority unoptimized /></div>
         <div className="hero-info">
-          <div><span className="eyebrow">CYNiiCAL AESTHETIC PRESENTS</span><h1>{song.title}</h1><p>{song.artist}</p></div>
+        <div><span className="eyebrow">CYNiiCAL PRODUCTIONS</span><h1>{song.title}</h1><p>{song.artist}</p></div>
           <div className="utility-row">
             <UtilityButton label={copied ? "Copied" : "Copy URL"} icon={copied ? FiCheck : FiCopy} onClick={() => void copyUrl()} />
             <UtilityButton label="Embed" icon={FiCode} onClick={openEmbed} />
@@ -55,7 +65,7 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
         </section>;
       })}
 
-      <footer><a href="https://cyniicalaesthetic.productions">CYNiiCAL AESTHETIC <span>×</span> PRODUCTIONS</a><p>Independent music, on your frequency.</p></footer>
+      <footer><a href="https://cyniicalaesthetic.productions">CYNiiCAL PRODUCTIONS</a><p>Independent music, on your frequency.</p></footer>
     </div>
     <EmbedModal song={song} open={embedOpen} onClose={() => setEmbedOpen(false)} />
   </main>;

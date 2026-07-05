@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { SongSmartLinkPage } from "@/components/SongSmartLinkPage";
-import { songs } from "@/data/songs";
-import { getSong } from "@/lib/getSong";
+import { getSongBySlug } from "@/lib/songRepository";
 
 type Props = { params: Promise<{ slug: string }> };
 
-export function generateStaticParams() { return songs.map(({ slug }) => ({ slug })); }
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const song = getSong((await params).slug);
+  const song = await getSongBySlug((await params).slug);
   if (!song) return { title: "Song not found" };
   return {
     title: song.seo.title,
@@ -21,7 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function SongPageRoute({ params }: Props) {
-  const song = getSong((await params).slug);
+  const song = await getSongBySlug((await params).slug);
   if (!song) notFound();
   return <SongSmartLinkPage song={song} />;
 }
