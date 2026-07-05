@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { SongSmartLinkPage } from "@/components/SongSmartLinkPage";
 import { PixelScripts } from "@/components/PixelScripts";
+import { HeadEntries } from "@/components/HeadEntries";
 import { getSongBySlug } from "@/lib/songRepository";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -22,6 +23,7 @@ export default async function SongPageRoute({ params }: Props) {
   const song = await getSongBySlug((await params).slug);
   if (!song) notFound();
   return <>
+    <HeadEntries entries={song.headEntries} />
     <PixelScripts
       tiktokPixelId={song.trackingPixels?.tiktokPixelId}
       metaPixelId={song.trackingPixels?.metaPixelId}

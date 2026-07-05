@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PlatformType, SongLink, SongPage } from "@/data/songs";
+import { HeadEntriesEditor } from "@/components/admin/HeadEntriesEditor";
 
 const blankLink: SongLink = { platform: "other", label: "New platform", url: "", section: "listen", enabled: true, order: 1 };
 export function SongEditor({ initialSong }: { initialSong?: SongPage }) {
@@ -48,6 +49,7 @@ export function SongEditor({ initialSong }: { initialSong?: SongPage }) {
       </div>
       <p className="field-help">Paste only the platform ID, not the full script code. Page views and platform clicks use these IDs automatically.</p>
     </section>
+    <HeadEntriesEditor entries={song.headEntries || []} onChange={(headEntries) => set("headEntries", headEntries)} />
     <section className="admin-panel"><div className="panel-title"><h2>Platform links</h2><button className="admin-secondary" onClick={() => setSong((current) => ({ ...current, links: [...current.links, { ...blankLink, order: current.links.length + 1 }] }))}>+ Add platform</button></div>
       <div className="link-editor-list">{song.links.map((link, index) => <div className="link-editor" key={`${index}-${link.platform}`}><span className="drag-order">{index + 1}</span><input aria-label="Platform" value={link.platform} onChange={(e) => updateLink(index, { platform: e.target.value as PlatformType })} /><input aria-label="Label" value={link.label} onChange={(e) => updateLink(index, { label: e.target.value })} /><input aria-label="Destination URL" className="link-url" value={link.url} onChange={(e) => updateLink(index, { url: e.target.value })} /><select aria-label="Section" value={link.section} onChange={(e) => updateLink(index, { section: e.target.value as SongLink["section"] })}><option>listen</option><option>buy</option><option>watch</option><option>other</option></select><label className="toggle"><input type="checkbox" checked={link.enabled} onChange={(e) => updateLink(index, { enabled: e.target.checked })} /> On</label><button onClick={() => moveLink(index, -1)} aria-label="Move up">↑</button><button onClick={() => moveLink(index, 1)} aria-label="Move down">↓</button><button className="danger" onClick={() => setSong((current) => ({ ...current, links: current.links.filter((_, i) => i !== index) }))}>Remove</button></div>)}</div>
     </section>

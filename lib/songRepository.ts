@@ -1,13 +1,14 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { songs as fallbackSongs, type PlatformType, type SongLink, type SongPage } from "@/data/songs";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { validateHeadEntries } from "@/lib/headEntries";
 
 type SongRow = {
   id: string; slug: string; title: string; artist: string; subtitle: string | null;
   artwork_url: string | null; background_image_url: string | null; release_date: string | null;
   canonical_url: string | null; seo_title: string | null; seo_description: string | null;
   og_image: string | null; published: boolean; tiktok_pixel_id: string | null;
-  meta_pixel_id: string | null; ga_measurement_id: string | null; song_links?: LinkRow[];
+  meta_pixel_id: string | null; ga_measurement_id: string | null; head_entries: unknown; song_links?: LinkRow[];
 };
 type LinkRow = { platform: string; label: string; url: string; section: string; enabled: boolean; display_order: number };
 
@@ -24,6 +25,7 @@ function fromRow(row: SongRow): SongPage {
       metaPixelId: row.meta_pixel_id ?? undefined,
       gaMeasurementId: row.ga_measurement_id ?? undefined
     },
+    headEntries: validateHeadEntries(row.head_entries),
     links: (row.song_links ?? []).map((link) => ({
       platform: link.platform as PlatformType, label: link.label, url: link.url,
       section: link.section as SongLink["section"], enabled: link.enabled, order: link.display_order
@@ -64,6 +66,7 @@ export async function getSongBySlug(slug: string, includeUnpublished = false): P
 export async function saveSong(song: SongPage) {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is not configured. Add SUPABASE_URL and SUPABASE_SECRET_KEY.");
+  const headEntries = validateHeadEntries(song.headEntries);
   const row = {
     slug: song.slug, title: song.title, artist: song.artist, subtitle: song.subtitle || null,
     artwork_url: song.artworkUrl || null, background_image_url: song.backgroundImageUrl || null,
@@ -74,6 +77,7 @@ export async function saveSong(song: SongPage) {
     tiktok_pixel_id: song.trackingPixels?.tiktokPixelId || null,
     meta_pixel_id: song.trackingPixels?.metaPixelId || null,
     ga_measurement_id: song.trackingPixels?.gaMeasurementId || null,
+    head_entries: headEntries,
     updated_at: new Date().toISOString()
   };
   const result = song.id

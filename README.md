@@ -13,6 +13,9 @@ Self-hosted music smart links and release analytics for `go.cyniicalaesthetic.pr
 - Apple Music search without additional credentials
 - Supabase release storage and click/visit analytics
 - TikTok Pixel, Meta Pixel, and GA4 events
+- Optional TikTok, Meta, and GA4 pixel IDs configured per release
+- Guarded per-release header meta tags, external scripts, and validated inline JavaScript
+- Songlink URL cloning with metadata and multi-platform link import
 
 ## Local development
 
@@ -50,6 +53,8 @@ Without Supabase credentials, the bundled `Watching Me` release remains availabl
 ## Supabase setup
 
 Run [supabase/schema.sql](supabase/schema.sql). The secret-key client is only created in server code. Row-level security is enabled on the three tables, so browser clients cannot bypass the admin APIs.
+
+For an existing database, run [supabase/migrations/20260705_add_campaign_integrations.sql](supabase/migrations/20260705_add_campaign_integrations.sql) once in the Supabase SQL Editor. It safely adds both per-release pixels and guarded custom page-header entries.
 
 ## Vercel and DNS
 

@@ -12,6 +12,18 @@ export type SongLink = {
   order: number;
 };
 
+export type HeadEntry = {
+  id: string;
+  label: string;
+  type: "meta" | "external_script" | "inline_script";
+  enabled: boolean;
+  metaAttribute?: "name" | "property";
+  metaKey?: string;
+  content?: string;
+  scriptUrl?: string;
+  inlineCode?: string;
+};
+
 export type SongPage = {
   id?: string;
   slug: string;
@@ -29,6 +41,7 @@ export type SongPage = {
     metaPixelId?: string;
     gaMeasurementId?: string;
   };
+  headEntries?: HeadEntry[];
   links: SongLink[];
   pixelEvents: { contentId: string; contentName: string; artistName: string };
   seo: { title: string; description: string; ogImage: string };

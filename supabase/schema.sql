@@ -21,6 +21,7 @@ create table if not exists click_events (
 alter table songs add column if not exists tiktok_pixel_id text;
 alter table songs add column if not exists meta_pixel_id text;
 alter table songs add column if not exists ga_measurement_id text;
+alter table songs add column if not exists head_entries jsonb not null default '[]'::jsonb;
 create index if not exists click_events_created_at_idx on click_events(created_at desc);
 create index if not exists click_events_song_id_idx on click_events(song_id);
 alter table songs enable row level security;
