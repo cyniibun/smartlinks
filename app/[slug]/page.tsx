@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { SongSmartLinkPage } from "@/components/SongSmartLinkPage";
-import { PixelScripts } from "@/components/PixelScripts";
-import { HeadEntries } from "@/components/HeadEntries";
+import { TikTokPixelDebug } from "@/components/TikTokPixelDebug";
 import { getSongBySlug } from "@/lib/songRepository";
 
-type Props = { params: Promise<{ slug: string }> };
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ debugPixel?: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const song = await getSongBySlug((await params).slug);
@@ -19,16 +18,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function SongPageRoute({ params }: Props) {
+export default async function SongPageRoute({ params, searchParams }: Props) {
   const song = await getSongBySlug((await params).slug);
   if (!song) notFound();
+  const tiktokPixelId = song.trackingPixels?.tiktokPixelId || process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID;
+  const debugPixel = (await searchParams).debugPixel === "1";
   return <>
-    <HeadEntries entries={song.headEntries} />
-    <PixelScripts
-      tiktokPixelId={song.trackingPixels?.tiktokPixelId}
-      metaPixelId={song.trackingPixels?.metaPixelId}
-      gaMeasurementId={song.trackingPixels?.gaMeasurementId}
-    />
     <SongSmartLinkPage song={song} />
+    {debugPixel && <TikTokPixelDebug pixelId={tiktokPixelId} songTitle={song.title} />}
   </>;
 }
