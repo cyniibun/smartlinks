@@ -12,7 +12,8 @@ declare global {
 }
 
 function trackTikTok(name: string, values: Record<string, unknown>) {
-  if (name === "ClickButton" && window.__cyniicalTikTokDebug) {
+  if (name === "ClickButton" && new URLSearchParams(window.location.search).get("debugPixel") === "1") {
+    window.__cyniicalTikTokDebug ||= { pixelId: window.__cyniicalTikTokInstalled || "Unknown", loaderRequested: Boolean(window.__cyniicalTikTokInstalled), pageCalled: true, lastClick: null };
     window.__cyniicalTikTokDebug.lastClick = { event: name, properties: values, at: new Date().toISOString() };
     window.dispatchEvent(new Event("cyniical:tiktok-debug"));
   }
@@ -20,30 +21,45 @@ function trackTikTok(name: string, values: Record<string, unknown>) {
 }
 
 export function trackView(song: SongPage) {
-  trackTikTok("ViewContent", {
+  const payload = {
     content_id: song.pixelEvents.contentId,
     content_name: song.pixelEvents.contentName,
     artist_name: song.pixelEvents.artistName
-  });
+  };
+  if (new URLSearchParams(window.location.search).get("debugPixel") === "1") console.log("ttq exists:", Boolean(window.ttq), "tracking ViewContent:", payload);
+  trackTikTok("ViewContent", payload);
   window.fbq?.("track", "ViewContent", { content_ids: [song.pixelEvents.contentId], content_name: song.pixelEvents.contentName });
   window.gtag?.("event", "view_item", { song_slug: song.slug, song_title: song.title, artist: song.artist });
 }
 
 export function trackPlatformClick(song: SongPage, link: SongLink) {
-  trackTikTok("ClickButton", {
-    content_id: song.pixelEvents.contentId, content_name: song.pixelEvents.contentName,
-    platform: link.platform, button_text: link.label
-  });
-  window.fbq?.("trackCustom", "MusicPlatformClick", {
-    content_id: song.pixelEvents.contentId, content_name: song.pixelEvents.contentName, platform: link.platform
-  });
-  window.gtag?.("event", "music_platform_click", {
-    song_slug: song.slug, song_title: song.title, platform: link.platform
-  });
+  const payload = {
+    button_text: link.label,
+    action: "platform_click",
+    platform: link.platform,
+    destination_url: link.url,
+    content_id: song.slug,
+    content_name: song.title,
+    artist_name: song.artist
+  };
+  if (new URLSearchParams(window.location.search).get("debugPixel") === "1") {
+    console.log("ttq exists:", Boolean(window.ttq));
+    console.log("tracking platform click:", payload);
+  }
+  try {
+    trackTikTok("ClickButton", payload);
+    window.fbq?.("trackCustom", "MusicPlatformClick", payload);
+    window.gtag?.("event", "music_platform_click", payload);
+  } catch (error) { console.warn("Pixel tracking failed", error); }
+  return payload;
 }
 
-export function trackUtility(song: SongPage, label: string) {
-  trackTikTok("ClickButton", { button_text: label, content_name: song.title });
-  window.fbq?.("trackCustom", "SmartLinkUtilityClick", { button_text: label, content_name: song.title });
-  window.gtag?.("event", "smart_link_utility_click", { song_slug: song.slug, button_text: label });
+export function trackUtility(song: SongPage, label: "Copy URL" | "Share" | "Embed", action: "copy_url" | "share" | "embed") {
+  const payload = { button_text: label, action, content_id: song.slug, content_name: song.title, artist_name: song.artist };
+  if (new URLSearchParams(window.location.search).get("debugPixel") === "1") console.log(`tracking ${action}:`, payload);
+  try {
+    trackTikTok("ClickButton", payload);
+    window.fbq?.("trackCustom", "SmartLinkUtilityClick", payload);
+    window.gtag?.("event", "smart_link_utility_click", payload);
+  } catch (error) { console.warn("Pixel tracking failed", error); }
 }

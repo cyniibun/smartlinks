@@ -28,18 +28,19 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
     else void fetch("/api/visit", { method: "POST", headers: { "content-type": "application/json" }, body: payload, keepalive: true });
   }, [song]);
 
-  const copyUrl = async (label = "Copy URL") => {
+  const copyUrl = async () => {
+    trackUtility(song, "Copy URL", "copy_url");
     if (await copyText(window.location.href)) {
-      trackUtility(song, label); setCopied(true); setTimeout(() => setCopied(false), 1800);
+      setCopied(true); setTimeout(() => setCopied(false), 1800);
     }
   };
   const share = async () => {
-    trackUtility(song, "Share");
+    trackUtility(song, "Share", "share");
     if (navigator.share) {
       try { await navigator.share({ title: `${song.title} by ${song.artist}`, text: `Listen to ${song.title} by ${song.artist}`, url: window.location.href }); } catch { /* share cancelled */ }
-    } else await copyUrl("Share fallback");
+    } else if (await copyText(window.location.href)) { setCopied(true); setTimeout(() => setCopied(false), 1800); }
   };
-  const openEmbed = () => { trackUtility(song, "Embed"); setEmbedOpen(true); };
+  const openEmbed = () => { trackUtility(song, "Embed", "embed"); setEmbedOpen(true); };
 
   return <main className="smart-link-shell">
     <Background artworkUrl={song.backgroundImageUrl ?? song.artworkUrl} />
