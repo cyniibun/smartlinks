@@ -24,6 +24,11 @@ export type SongPage = {
   canonicalUrl: string;
   shortUrl?: string;
   published?: boolean;
+  trackingPixels?: {
+    tiktokPixelId?: string;
+    metaPixelId?: string;
+    gaMeasurementId?: string;
+  };
   links: SongLink[];
   pixelEvents: { contentId: string; contentName: string; artistName: string };
   seo: { title: string; description: string; ogImage: string };

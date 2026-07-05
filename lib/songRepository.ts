@@ -6,7 +6,8 @@ type SongRow = {
   id: string; slug: string; title: string; artist: string; subtitle: string | null;
   artwork_url: string | null; background_image_url: string | null; release_date: string | null;
   canonical_url: string | null; seo_title: string | null; seo_description: string | null;
-  og_image: string | null; published: boolean; song_links?: LinkRow[];
+  og_image: string | null; published: boolean; tiktok_pixel_id: string | null;
+  meta_pixel_id: string | null; ga_measurement_id: string | null; song_links?: LinkRow[];
 };
 type LinkRow = { platform: string; label: string; url: string; section: string; enabled: boolean; display_order: number };
 
@@ -18,6 +19,11 @@ function fromRow(row: SongRow): SongPage {
     releaseDate: row.release_date ?? undefined,
     canonicalUrl: row.canonical_url || `https://go.cyniicalaesthetic.productions/${row.slug}`,
     shortUrl: row.canonical_url ?? undefined, published: row.published,
+    trackingPixels: {
+      tiktokPixelId: row.tiktok_pixel_id ?? undefined,
+      metaPixelId: row.meta_pixel_id ?? undefined,
+      gaMeasurementId: row.ga_measurement_id ?? undefined
+    },
     links: (row.song_links ?? []).map((link) => ({
       platform: link.platform as PlatformType, label: link.label, url: link.url,
       section: link.section as SongLink["section"], enabled: link.enabled, order: link.display_order
@@ -65,6 +71,9 @@ export async function saveSong(song: SongPage) {
     canonical_url: song.canonicalUrl || `https://go.cyniicalaesthetic.productions/${song.slug}`,
     seo_title: song.seo.title, seo_description: song.seo.description,
     og_image: song.seo.ogImage || song.artworkUrl || null, published: song.published ?? false,
+    tiktok_pixel_id: song.trackingPixels?.tiktokPixelId || null,
+    meta_pixel_id: song.trackingPixels?.metaPixelId || null,
+    ga_measurement_id: song.trackingPixels?.gaMeasurementId || null,
     updated_at: new Date().toISOString()
   };
   const result = song.id

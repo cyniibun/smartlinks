@@ -16,6 +16,11 @@ create table if not exists click_events (
   event_type text default 'click', platform text, destination_url text, referrer text, user_agent text,
   ip_hash text, utm_source text, utm_medium text, utm_campaign text, created_at timestamptz default now()
 );
+
+-- Per-release advertising pixels. These ALTERs safely upgrade an existing project.
+alter table songs add column if not exists tiktok_pixel_id text;
+alter table songs add column if not exists meta_pixel_id text;
+alter table songs add column if not exists ga_measurement_id text;
 create index if not exists click_events_created_at_idx on click_events(created_at desc);
 create index if not exists click_events_song_id_idx on click_events(song_id);
 alter table songs enable row level security;
