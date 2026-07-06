@@ -112,6 +112,17 @@ export async function getSongBySlug(slug: string, includeUnpublished = false, wo
   return data ? fromRow(data as SongRow) : undefined;
 }
 
+export async function getSongByLinkPageId(id: string, workspaceId: string): Promise<SongPage | undefined> {
+  noStore();
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return undefined;
+  const result = await supabase.from("link_pages")
+    .select("*, page_links(*), artists(name,default_label_name,default_tiktok_pixel_id,default_meta_pixel_id,default_ga_measurement_id,default_head_entries), releases(release_date,label_name)")
+    .eq("id", id).eq("workspace_id", workspaceId).maybeSingle();
+  if (result.error) throw new Error(result.error.message);
+  return result.data ? fromLinkPage(result.data as unknown as LinkPageRow) : undefined;
+}
+
 export async function saveSong(song: SongPage, workspaceId: string) {
   const supabase = getSupabaseAdmin();
   if (!supabase) throw new Error("Supabase is not configured. Add SUPABASE_URL and SUPABASE_SECRET_KEY.");
