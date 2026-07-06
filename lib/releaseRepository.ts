@@ -8,6 +8,14 @@ export type ReleaseDraft = {
   pixels?: { tiktok?: string; meta?: string; ga?: string }; links: Array<ResolvedLink & { selected: boolean }>;
 };
 
+async function uniqueSlug(db: NonNullable<ReturnType<typeof getSupabaseAdmin>>, requested: string) {
+  const base = requested.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "link";
+  const matches = await db.from("link_pages").select("slug").or(`slug.eq.${base},slug.like.${base}-%`);
+  if (matches.error) throw new Error(matches.error.message);
+  const used = new Set((matches.data || []).map((row) => row.slug)); if (!used.has(base)) return base;
+  let suffix = 2; while (used.has(`${base}-${suffix}`)) suffix += 1; return `${base}-${suffix}`;
+}
+
 export async function listArtists(workspaceId: string) {
   const db = getSupabaseAdmin(); if (!db) throw new Error("Supabase is not configured.");
   const result = await db.from("artists").select("*").eq("workspace_id", workspaceId).order("name");
@@ -28,6 +36,7 @@ export async function createRelease(workspaceId: string, draft: ReleaseDraft) {
     const owned = await db.from("artists").select("id").eq("id", artistId).eq("workspace_id", workspaceId).maybeSingle();
     if (!owned.data) throw new Error("Artist does not belong to this workspace.");
   }
+  const allocatedSlug = await uniqueSlug(db, draft.slug);
   const release = await db.from("releases").insert({
     workspace_id: workspaceId, artist_id: artistId, title: draft.title, release_type: draft.releaseType,
     primary_artist_name: draft.artist, label_name: draft.labelName || null, release_date: draft.releaseDate || null,
@@ -37,9 +46,9 @@ export async function createRelease(workspaceId: string, draft: ReleaseDraft) {
   }).select("id").single();
   if (release.error) throw new Error(release.error.message);
   const page = await db.from("link_pages").insert({
-    workspace_id: workspaceId, artist_id: artistId, release_id: release.data.id, slug: draft.slug,
+    workspace_id: workspaceId, artist_id: artistId, release_id: release.data.id, slug: allocatedSlug,
     title: draft.title, artist_display_name: draft.artist, label_name: draft.labelName || null,
-    artwork_url: draft.artworkUrl || null, canonical_url: `https://link.tone-link.com/${draft.slug}`,
+    artwork_url: draft.artworkUrl || null, canonical_url: `https://link.tone-link.com/${allocatedSlug}`,
     seo_title: `${draft.title} by ${draft.artist}`, seo_description: `Choose your preferred platform for ${draft.title} by ${draft.artist}.`,
     og_image: draft.artworkUrl || null, published: draft.published,
     tiktok_pixel_id: draft.pixels?.tiktok || null, meta_pixel_id: draft.pixels?.meta || null, ga_measurement_id: draft.pixels?.ga || null
@@ -52,7 +61,12 @@ export async function createRelease(workspaceId: string, draft: ReleaseDraft) {
       url: link.url, section: link.section, enabled: true, display_order: index + 1,
       confidence: link.confidence, source: link.source, review_status: "approved"
     })));
-    if (inserted.error) throw new Error(inserted.error.message);
+    if (inserted.error) { await db.from("releases").delete().eq("id", release.data.id).eq("workspace_id", workspaceId); throw new Error(inserted.error.message); }
   }
-  return page.data;
+  const verified = await db.from("link_pages").select("id,slug,published,release_id,page_links(id)").eq("id", page.data.id).eq("workspace_id", workspaceId).single();
+  if (verified.error || !verified.data || verified.data.release_id !== release.data.id || (verified.data.page_links?.length || 0) !== selected.length) {
+    await db.from("releases").delete().eq("id", release.data.id).eq("workspace_id", workspaceId);
+    throw new Error(verified.error?.message || "Save verification failed; no partial Link Page was kept.");
+  }
+  return { id: verified.data.id, slug: verified.data.slug, published: verified.data.published, publicUrl: `https://link.tone-link.com/${verified.data.slug}` };
 }

@@ -1,10 +1,5 @@
-import { AdminDashboard } from "@/components/admin/AdminDashboard";
+import { redirect } from "next/navigation";
+import { LinkPagesList } from "@/components/admin/LinkPagesList";
 import { getWorkspaceContext } from "@/lib/adminAuth";
-import { listSongs } from "@/lib/songRepository";
-import { hasSupabaseConfig } from "@/lib/supabase";
-import type { SongPage } from "@/data/songs";
-export default async function DashboardPage() {
-  const context = await getWorkspaceContext(); if (!context) return null;
-  let songs: SongPage[] = []; let error = false; try { songs = await listSongs(true, context.workspace.id); } catch { error = true; }
-  return <AdminDashboard initialSongs={songs} databaseReady={hasSupabaseConfig() && !error} />;
-}
+import { getSupabaseAdmin } from "@/lib/supabase";
+export default async function DashboardPage(){const context=await getWorkspaceContext();if(!context)redirect("/login");const db=getSupabaseAdmin();const result=await db?.from("link_pages").select("id,slug,title,artist_display_name,artwork_url,published,page_type,created_at").eq("workspace_id",context.workspace.id).order("created_at",{ascending:false});return <main className="admin-main"><LinkPagesList workspaceId={context.workspace.id} pages={result?.data||[]}/></main>}
