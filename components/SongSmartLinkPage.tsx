@@ -48,7 +48,7 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
       <section className="hero-card">
         <div className="artwork-wrap"><Image src={song.artworkUrl} alt={`${song.title} cover artwork`} width={900} height={900} priority unoptimized /></div>
         <div className="hero-info">
-        <div><span className="eyebrow">CYNiiCAL PRODUCTIONS</span><h1>{song.title}</h1><p>{song.artist}</p></div>
+        <div><span className="eyebrow">tone-link</span><h1>{song.title}</h1><p>{song.artist}</p></div>
           <div className="utility-row">
             <UtilityButton label={copied ? "Copied" : "Copy URL"} icon={copied ? FiCheck : FiCopy} onClick={() => void copyUrl()} />
             <UtilityButton label="Embed" icon={FiCode} onClick={openEmbed} />
@@ -66,7 +66,7 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
         </section>;
       })}
 
-      <footer><a href="https://cyniicalaesthetic.productions">CYNiiCAL PRODUCTIONS</a><p>Independent music, on your frequency.</p></footer>
+      <footer><a href="https://tone-link.com">tone-link</a><p>Independent music, on your frequency.</p></footer>
     </div>
     <EmbedModal song={song} open={embedOpen} onClose={() => setEmbedOpen(false)} />
   </main>;

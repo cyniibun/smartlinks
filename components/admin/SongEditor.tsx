@@ -15,7 +15,7 @@ export function SongEditor({ initialSong }: { initialSong?: SongPage }) {
   const updateLink = (index: number, patch: Partial<SongLink>) => setSong((current) => ({ ...current, links: current.links.map((link, i) => i === index ? { ...link, ...patch } : link) }));
   const moveLink = (index: number, direction: -1 | 1) => setSong((current) => { const links = [...current.links]; const target = index + direction; if (target < 0 || target >= links.length) return current; [links[index], links[target]] = [links[target], links[index]]; return { ...current, links: links.map((link, i) => ({ ...link, order: i + 1 })) }; });
   const save = async (publish?: boolean) => {
-    setSaving(true); setError(""); const finalSong = { ...song, published: publish ?? song.published, canonicalUrl: song.canonicalUrl || `https://go.cyniicalaesthetic.productions/${song.slug}`, pixelEvents: { contentId: song.slug, contentName: song.title, artistName: song.artist }, seo: { title: song.seo.title || `${song.title} by ${song.artist}`, description: song.seo.description || `Choose your preferred music platform to listen to ${song.title} by ${song.artist}.`, ogImage: song.seo.ogImage || song.artworkUrl } };
+    setSaving(true); setError(""); const finalSong = { ...song, published: publish ?? song.published, canonicalUrl: song.canonicalUrl || `https://link.tone-link.com/${song.slug}`, pixelEvents: { contentId: song.slug, contentName: song.title, artistName: song.artist }, seo: { title: song.seo.title || `${song.title} by ${song.artist}`, description: song.seo.description || `Choose your preferred music platform to listen to ${song.title} by ${song.artist}.`, ogImage: song.seo.ogImage || song.artworkUrl } };
     const response = await fetch(song.id ? `/api/admin/songs/${song.id}` : "/api/admin/songs", { method: song.id ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(finalSong) }); const json = await response.json();
     if (!response.ok) { setError(json.error); setSaving(false); return; } setSong(json.song); setSaving(false); router.push("/admin"); router.refresh();
   };
@@ -33,7 +33,7 @@ export function SongEditor({ initialSong }: { initialSong?: SongPage }) {
       <label>Artwork URL<input value={song.artworkUrl} onChange={(e) => set("artworkUrl", e.target.value)} placeholder="https://… or /artwork/file.jpg" /></label>
       <label>Background image URL<input value={song.backgroundImageUrl || ""} onChange={(e) => set("backgroundImageUrl", e.target.value)} /></label>
       <label>Release date<input type="date" value={song.releaseDate || ""} onChange={(e) => set("releaseDate", e.target.value)} /></label>
-      <label>Canonical URL<input value={song.canonicalUrl} onChange={(e) => set("canonicalUrl", e.target.value)} placeholder={`https://go.cyniicalaesthetic.productions/${song.slug}`} /></label>
+      <label>Canonical URL<input value={song.canonicalUrl} onChange={(e) => set("canonicalUrl", e.target.value)} placeholder={`https://link.tone-link.com/${song.slug}`} /></label>
     </div></section>
     <section className="admin-panel"><h2>Search & social</h2><div className="form-grid">
       <label>SEO title<input value={song.seo.title} onChange={(e) => setSeo("title", e.target.value)} /></label>

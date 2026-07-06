@@ -1,6 +1,6 @@
-# Cyniical Smart Links
+# tone-link
 
-Self-hosted music smart links and release analytics for `go.cyniicalaesthetic.productions`.
+Self-hosted music smart links and release analytics for `link.tone-link.com`.
 
 ## Features
 
@@ -58,9 +58,9 @@ For an existing database, run [supabase/migrations/20260705_add_campaign_integra
 
 ## Vercel and DNS
 
-Import this repository into Vercel and add the environment variables for Production, Preview, and Development as appropriate. Add `go.cyniicalaesthetic.productions` as the Vercel project domain.
+Import this repository into Vercel and add the environment variables for Production, Preview, and Development as appropriate. Add `link.tone-link.com` as the Vercel project domain.
 
-At the DNS provider for `cyniicalaesthetic.productions`, add only the `go` CNAME supplied by Vercel—commonly `cname.vercel-dns.com`. Do not change the root or `www` records.
+At the DNS provider for `tone-link.com`, point only the `link` subdomain at the CNAME supplied by Vercel—commonly `cname.vercel-dns.com`. Do not change the root or `www` records.
 
 ## Import behavior
 

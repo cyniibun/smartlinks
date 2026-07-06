@@ -5,9 +5,9 @@ import { getSongBySlug } from "@/lib/songRepository";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://go.cyniicalaesthetic.productions"),
-  title: { default: "Cyniical — Smart Links", template: "%s | Cyniical" },
-  description: "Listen to Cyniical on your favorite music platform."
+  metadataBase: new URL("https://link.tone-link.com"),
+  title: { default: "tone-link — Music Smart Links", template: "%s | tone-link" },
+  description: "Choose your preferred platform and listen to your favorite releases."
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

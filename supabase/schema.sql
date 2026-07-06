@@ -34,7 +34,7 @@ insert into songs (
   seo_title, seo_description, og_image, published
 ) values (
   'watching-me', 'Watching Me', 'Cyniical', '/artwork/watching-me.jpg',
-  'https://go.cyniicalaesthetic.productions/watching-me',
+  'https://link.tone-link.com/watching-me',
   'Watching Me by Cyniical',
   'Choose your preferred music platform to listen to Watching Me by Cyniical.',
   '/artwork/watching-me.jpg', true

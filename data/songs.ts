@@ -52,8 +52,8 @@ export const songs: SongPage[] = [{
   title: "Watching Me",
   artist: "Cyniical",
   artworkUrl: "/artwork/watching-me.jpg",
-  canonicalUrl: "https://go.cyniicalaesthetic.productions/watching-me",
-  shortUrl: "https://go.cyniicalaesthetic.productions/watching-me",
+  canonicalUrl: "https://link.tone-link.com/watching-me",
+  shortUrl: "https://link.tone-link.com/watching-me",
   published: true,
   pixelEvents: { contentId: "watching-me", contentName: "Watching Me", artistName: "Cyniical" },
   seo: {

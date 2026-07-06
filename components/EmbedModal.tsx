@@ -8,7 +8,7 @@ import { copyText } from "@/lib/copyText";
 export function EmbedModal({ song, open, onClose }: { song: SongPage; open: boolean; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   if (!open) return null;
-  const code = `<iframe src="https://go.cyniicalaesthetic.productions/embed/${song.slug}" width="100%" height="500" frameborder="0" title="${song.title} by ${song.artist}"></iframe>`;
+  const code = `<iframe src="https://link.tone-link.com/embed/${song.slug}" width="100%" height="500" frameborder="0" title="${song.title} by ${song.artist}"></iframe>`;
   const copy = async () => { if (await copyText(code)) { setCopied(true); setTimeout(() => setCopied(false), 1800); } };
 
   return <div className="modal-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

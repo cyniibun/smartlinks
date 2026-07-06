@@ -12,14 +12,21 @@ type SongRow = {
 };
 type LinkRow = { platform: string; label: string; url: string; section: string; enabled: boolean; display_order: number };
 
+const PUBLIC_ORIGIN = "https://link.tone-link.com";
+
+function publicSongUrl(url: string | null, slug: string) {
+  return (url || `${PUBLIC_ORIGIN}/${slug}`).replace("https://go.cyniicalaesthetic.productions", PUBLIC_ORIGIN);
+}
+
 function fromRow(row: SongRow): SongPage {
+  const canonicalUrl = publicSongUrl(row.canonical_url, row.slug);
   return {
     id: row.id, slug: row.slug, title: row.title, artist: row.artist,
     subtitle: row.subtitle ?? undefined, artworkUrl: row.artwork_url ?? "",
     backgroundImageUrl: row.background_image_url ?? undefined,
     releaseDate: row.release_date ?? undefined,
-    canonicalUrl: row.canonical_url || `https://go.cyniicalaesthetic.productions/${row.slug}`,
-    shortUrl: row.canonical_url ?? undefined, published: row.published,
+    canonicalUrl,
+    shortUrl: canonicalUrl, published: row.published,
     trackingPixels: {
       tiktokPixelId: row.tiktok_pixel_id ?? undefined,
       metaPixelId: row.meta_pixel_id ?? undefined,
@@ -71,7 +78,7 @@ export async function saveSong(song: SongPage) {
     slug: song.slug, title: song.title, artist: song.artist, subtitle: song.subtitle || null,
     artwork_url: song.artworkUrl || null, background_image_url: song.backgroundImageUrl || null,
     release_date: song.releaseDate || null,
-    canonical_url: song.canonicalUrl || `https://go.cyniicalaesthetic.productions/${song.slug}`,
+    canonical_url: publicSongUrl(song.canonicalUrl || null, song.slug),
     seo_title: song.seo.title, seo_description: song.seo.description,
     og_image: song.seo.ogImage || song.artworkUrl || null, published: song.published ?? false,
     tiktok_pixel_id: song.trackingPixels?.tiktokPixelId || null,
