@@ -7,8 +7,8 @@ const qualifiers=["remix","live","sped up","instrumental"];
 function qualifierCompatible(source:string,candidate:string){const sourceText=normalize(source),candidateText=normalize(candidate);return qualifiers.every(qualifier=>!candidateText.includes(qualifier)||sourceText.includes(qualifier))}
 function appleUrls(trackViewUrl:string){let appleMusicUrl=trackViewUrl,iTunesUrl:string|undefined;try{const music=new URL(trackViewUrl);music.searchParams.set("app","music");appleMusicUrl=music.toString();const store=new URL(trackViewUrl);store.searchParams.set("app","itunes");iTunesUrl=store.toString()}catch{/* The original result remains usable as Apple Music. */}return{appleMusicUrl,iTunesUrl}}
 
-async function searchApple(term:string) {
-  const country=(process.env.APPLE_MUSIC_COUNTRY||"US").toUpperCase();
+async function searchApple(term:string,countryOverride?:string) {
+  const country=(countryOverride||process.env.APPLE_MUSIC_COUNTRY||"US").toUpperCase();
   const params=new URLSearchParams({term,entity:"song",media:"music",limit:"10",country});
   const response=await fetch(`https://itunes.apple.com/search?${params}`,{cache:"no-store"});
   if(!response.ok)throw new Error(`Apple Music search failed (${response.status}).`);
@@ -22,9 +22,9 @@ function toCandidate(item:AppleSearchResult):ImportCandidate {
   return {provider:"apple_music",externalId:String(item.trackId),title:String(item.trackName),artist:String(item.artistName),artworkUrl:String(item.artworkUrl100).replace("100x100bb","1200x1200bb"),releaseDate:String(item.releaseDate).slice(0,10),album:item.collectionName?String(item.collectionName):undefined,isrc:item.isrc?String(item.isrc):undefined,labelName:item.copyright?String(item.copyright):undefined,copyright:item.copyright?String(item.copyright):undefined,appleMusicUrl,iTunesUrl,links};
 }
 
-export async function resolveAppleMusicLinks(input:{title?:string;artist?:string;isrc?:string;album?:string}) {
+export async function resolveAppleMusicLinks(input:{title?:string;artist?:string;isrc?:string;album?:string;country?:string}) {
   if(!input.title||!input.artist)return null;
-  const results=await searchApple(`${input.artist} ${input.title}`);
+  const results=await searchApple(`${input.artist} ${input.title}`,input.country);
   const scored=results.filter(item=>qualifierCompatible(input.title||"",String(item.trackName||""))).map(item=>({item,title:similarity(String(item.trackName||""),input.title||""),artist:similarity(String(item.artistName||""),input.artist||""),album:input.album?similarity(String(item.collectionName||""),input.album):0,isrc:Boolean(input.isrc&&item.isrc&&String(item.isrc).toUpperCase()===input.isrc.toUpperCase())})).sort((a,b)=>(Number(b.isrc)*10+b.title+b.artist+b.album*.25)-(Number(a.isrc)*10+a.title+a.artist+a.album*.25));
   const match=scored.find(item=>item.isrc)||scored.find(item=>item.title>=.8&&item.artist>=.75&&(input.album?item.album>=.45:true));
   if(!match){console.info("[tone-link:apple:rejected]",{title:input.title,artist:input.artist,isrc:input.isrc||null,candidates:results.length});return null}

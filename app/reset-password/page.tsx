@@ -1,0 +1,2 @@
+import { ResetPasswordForm } from "@/components/admin/ResetPasswordForm";
+export default function ResetPasswordPage(){const url=[process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_URL].find(value=>{try{return Boolean(value&&["http:","https:"].includes(new URL(value.trim()).protocol))}catch{return false}})?.trim()||"";const publishableKey=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY||"";return <ResetPasswordForm url={url} publishableKey={publishableKey}/>}

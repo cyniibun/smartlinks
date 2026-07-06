@@ -23,7 +23,7 @@ function confidenceFor(provider: string, platform: string, isSubmitted: boolean)
   return 0.85;
 }
 
-type ResolverHints = { title?: string; artist?: string; album?:string; isrc?: string; importSource?: { provider?: string }; selectedResult?: Partial<ImportCandidate>; fallbackOnly?:boolean };
+type ResolverHints = { title?: string; artist?: string; album?:string; isrc?: string; market?:string; importSource?: { provider?: string }; selectedResult?: Partial<ImportCandidate>; fallbackOnly?:boolean };
 
 function resolvedSourceLink(link: {platform:SongLink["platform"];label:string;url:string;section:SongLink["section"]}, source="selected_source_result"):ResolvedLink {
   return {...link,confidence:1,source,enabledByDefault:true};
@@ -69,7 +69,7 @@ export async function resolveLinksFromSourceUrl(sourceUrl: string, hints: Resolv
     catch (error) { report.push({ platform: "Spotify", status: "missing", reason: error instanceof Error ? error.message : "Spotify search failed" }); return null; }
   };
   const tryApple = async () => {
-    try{return await resolveAppleMusicLinks(metadata)}catch(error){report.push({platform:"Apple Music",status:"missing",reason:error instanceof Error?error.message:"Apple Music search failed"});return null}
+    try{return await resolveAppleMusicLinks({...metadata,country:hints.market})}catch(error){report.push({platform:"Apple Music",status:"missing",reason:error instanceof Error?error.message:"Apple Music search failed"});return null}
   };
   const tryOdesli=async()=>{try{return await importOdesli({url:sourceUrl})}catch(error){console.warn("[tone-link:odesli:error]",error instanceof Error?error.message:error);return[]}};
   const [spotifyFallback,appleFallback,candidates]=await Promise.all([trySpotify(),tryApple(),tryOdesli()]);

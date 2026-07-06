@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function SongPageRoute({ params, searchParams }: Props) {
   const song = await getSongBySlug((await params).slug);
   if (!song) notFound();
-  const tiktokPixelId = song.trackingPixels?.tiktokPixelId || process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID;
+  const tiktokPixelId = song.trackingPixels?.tiktokPixelId;
   const debugPixel = (await searchParams).debugPixel === "1";
   return <>
     <SongSmartLinkPage song={song} />

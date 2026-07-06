@@ -28,6 +28,7 @@ export async function listReleases(workspaceId: string) {
 }
 export async function createRelease(workspaceId: string, draft: ReleaseDraft) {
   const db = getSupabaseAdmin(); if (!db) throw new Error("Supabase is not configured.");
+  const workspaceResult=await db.from("workspaces").select("*").eq("id",workspaceId).single();if(workspaceResult.error)throw new Error(workspaceResult.error.message);const publicDomain=String(workspaceResult.data.default_public_domain||"link.tone-link.com").replace(/^https?:\/\//,"").replace(/\/$/,"");
   let artistId = draft.artistId;
   if (!artistId) {
     const artist = await db.from("artists").insert({ workspace_id: workspaceId, name: draft.newArtistName || draft.artist }).select("id,default_tiktok_pixel_id,default_meta_pixel_id,default_ga_measurement_id,default_label_name").single();
@@ -48,7 +49,7 @@ export async function createRelease(workspaceId: string, draft: ReleaseDraft) {
   const page = await db.from("link_pages").insert({
     workspace_id: workspaceId, artist_id: artistId, release_id: release.data.id, slug: allocatedSlug,
     title: draft.title, artist_display_name: draft.artist, label_name: draft.labelName || null,
-    artwork_url: draft.artworkUrl || null, canonical_url: `https://link.tone-link.com/${allocatedSlug}`,
+    artwork_url: draft.artworkUrl || null, canonical_url: `https://${publicDomain}/${allocatedSlug}`,
     seo_title: `${draft.title} by ${draft.artist}`, seo_description: `Choose your preferred platform for ${draft.title} by ${draft.artist}.`,
     og_image: draft.artworkUrl || null, published: draft.published,
     tiktok_pixel_id: draft.pixels?.tiktok || null, meta_pixel_id: draft.pixels?.meta || null, ga_measurement_id: draft.pixels?.ga || null
@@ -68,5 +69,5 @@ export async function createRelease(workspaceId: string, draft: ReleaseDraft) {
     await db.from("releases").delete().eq("id", release.data.id).eq("workspace_id", workspaceId);
     throw new Error(verified.error?.message || "Save verification failed; no partial Link Page was kept.");
   }
-  return { id: verified.data.id, slug: verified.data.slug, published: verified.data.published, publicUrl: `https://link.tone-link.com/${verified.data.slug}` };
+  return { id: verified.data.id, slug: verified.data.slug, published: verified.data.published, publicUrl: `https://${publicDomain}/${verified.data.slug}` };
 }
