@@ -8,7 +8,7 @@ import { detectPlatformUrl } from "@/lib/platformDetection";
 import type { ResolvedLink, ResolvedRelease } from "@/lib/resolver";
 
 type Artist = { id: string; name: string };
-type Candidate = { provider:string; title:string; artist:string; artworkUrl?:string; releaseDate?:string; isrc?:string; links:Array<{platform:string;label:string;url:string;section:string}> };
+type Candidate = { provider:string; title:string; artist:string; artworkUrl?:string; releaseDate?:string; isrc?:string; album?:string; labelName?:string; copyright?:string; appleMusicUrl?:string; iTunesUrl?:string; links:Array<{platform:string;label:string;url:string;section:string}> };
 type StoredImport = { candidate: Candidate; query: string };
 type EditableLink = ResolvedLink & { selected: boolean };
 const releaseTypes=["single","album","ep","playlist","podcast","podcast_episode","audiobook","youtube_video","merch","event","ticket_page","presave","artist_bio","short_link","custom"];
@@ -30,10 +30,10 @@ export function ReleaseReview({workspaceId,artists}:{workspaceId:string;artists:
     let stored:StoredImport;
     try{stored=JSON.parse(raw) as StoredImport}catch{setError("The imported release could not be read. Return to search and try again.");setReady(true);return}
     const c=stored.candidate; const url=c.links[0]?.url||(/^https?:\/\//i.test(stored.query)?stored.query:"");
-    setTitle(c.title);setDisplayArtist(c.artist);setSlug(slugify(c.title));setArtworkUrl(c.artworkUrl||"");setReleaseDate(c.releaseDate||"");setSourceUrl(url);
+    setTitle(c.title);setDisplayArtist(c.artist);setSlug(slugify(c.title));setArtworkUrl(c.artworkUrl||"");setReleaseDate(c.releaseDate||"");setLabelName(c.labelName||c.copyright||"");setSourceUrl(url);
     setLinks(c.links.map((link,index)=>({...link,platform:link.platform as EditableLink["platform"],section:link.section as EditableLink["section"],confidence:index===0?1:.5,source:c.provider,enabledByDefault:index===0,selected:index===0})));
     setReady(true);setBusy(true);
-    void fetch("/api/admin/resolve",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({sourceUrl:url,title:c.title,artist:c.artist,isrc:c.isrc})}).then(async response=>{const json=await response.json();if(!response.ok)throw new Error(json.error||`Resolver failed (${response.status})`);const release=json.release as ResolvedRelease;setResolved(release);setTitle(release.title||c.title);setDisplayArtist(release.artist||c.artist);setSlug(slugify(release.title||c.title));setArtworkUrl(release.artworkUrl||c.artworkUrl||"");setReleaseDate(release.releaseDate||c.releaseDate||"");setLinks(release.links.map(link=>({...link,selected:link.enabledByDefault}))) }).catch(reason=>setError(`${reason instanceof Error?reason.message:"Platform resolution failed."} You can still review, add links, and save.`)).finally(()=>setBusy(false));
+    void fetch("/api/admin/resolve",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({sourceUrl:url,title:c.title,artist:c.artist,isrc:c.isrc,importSource:{provider:c.provider},selectedResult:c})}).then(async response=>{const json=await response.json();if(!response.ok)throw new Error(json.error||`Resolver failed (${response.status})`);const release=json.release as ResolvedRelease;setResolved(release);setTitle(release.title||c.title);setDisplayArtist(release.artist||c.artist);setSlug(slugify(release.title||c.title));setArtworkUrl(release.artworkUrl||c.artworkUrl||"");setReleaseDate(release.releaseDate||c.releaseDate||"");setLabelName(release.labelName||c.labelName||c.copyright||"");setLinks(release.links.map(link=>({...link,selected:link.enabledByDefault}))) }).catch(reason=>setError(`${reason instanceof Error?reason.message:"Platform resolution failed."} You can still review, add links, and save.`)).finally(()=>setBusy(false));
   },[searchParams]);
 
   const updateLink=(index:number,change:Partial<EditableLink>)=>setLinks(current=>current.map((link,i)=>i===index?{...link,...change}:link));

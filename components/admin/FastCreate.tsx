@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArtworkPreview } from "@/components/admin/ArtworkPreview";
 import type { ResolvedLink, ResolvedRelease } from "@/lib/resolver";
-type Artist={id:string;name:string}; type Candidate={provider:string;title:string;artist:string;artworkUrl?:string;releaseDate?:string;isrc?:string;album?:string;links:Array<{platform:string;label:string;url:string;section:string}>};
+type Artist={id:string;name:string}; type Candidate={provider:string;title:string;artist:string;artworkUrl?:string;releaseDate?:string;isrc?:string;album?:string;labelName?:string;copyright?:string;appleMusicUrl?:string;iTunesUrl?:string;links:Array<{platform:string;label:string;url:string;section:string}>};
 export function FastCreate({workspaceId,artists}:{workspaceId:string;artists:Artist[]}){
  const router=useRouter();const[query,setQuery]=useState("");const[candidates,setCandidates]=useState<Candidate[]>([]);const[busy,setBusy]=useState(false);const[error,setError]=useState("");const[warnings,setWarnings]=useState<string[]>([]);
  const search=async()=>{setBusy(true);setError("");setWarnings([]);try{const isUrl=/^https?:\/\//i.test(query);const r=await fetch("/api/admin/import",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(isUrl?{url:query}:{query})});const j=await r.json();if(!r.ok)throw new Error(j.error||`Search failed (${r.status})`);setCandidates(j.candidates||[]);setWarnings(j.warnings||[]);if(!(j.candidates||[]).length)setError("No results found. Try a URL or continue with advanced search for manual entry.")}catch(reason){setError(reason instanceof Error?reason.message:"Search failed. Please try again.")}finally{setBusy(false)}};
