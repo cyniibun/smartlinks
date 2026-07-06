@@ -7,7 +7,7 @@ export type SongLink = {
   platform: PlatformType;
   label: string;
   url: string;
-  section: "listen" | "buy" | "watch" | "other";
+  section: "listen" | "buy" | "watch" | "podcast" | "merch" | "tickets" | "other";
   enabled: boolean;
   order: number;
 };
@@ -33,6 +33,11 @@ export type SongPage = {
   artworkUrl: string;
   backgroundImageUrl?: string;
   releaseDate?: string;
+  labelName?: string;
+  workspaceId?: string;
+  artistId?: string;
+  releaseId?: string;
+  linkPageId?: string;
   canonicalUrl: string;
   shortUrl?: string;
   published?: boolean;

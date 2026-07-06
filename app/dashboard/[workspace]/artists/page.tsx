@@ -1,0 +1,4 @@
+import { redirect } from "next/navigation";
+import { getWorkspaceContext } from "@/lib/adminAuth";
+import { listArtists } from "@/lib/releaseRepository";
+export default async function ArtistsPage({ params }: { params: Promise<{ workspace: string }> }) { const id=(await params).workspace; if(!await getWorkspaceContext(id)) redirect("/login"); const artists=await listArtists(id); return <main className="admin-main"><div className="admin-title-row"><div><span className="admin-kicker">CATALOG</span><h1>Artists</h1><p>Reusable identity, pixels, socials, and label defaults.</p></div></div><div className="release-table">{artists.map((artist) => <article className="release-row" key={artist.id}><div className="release-meta"><strong>{artist.name}</strong><span>{artist.default_label_name || "No label default"}</span></div></article>)}</div></main>; }

@@ -17,7 +17,7 @@ export function ImportTool() {
   const cloneCandidate = (candidate: ImportCandidate) => {
     const slug = slugify(candidate.title);
     const draft = { slug, title: candidate.title, artist: candidate.artist, artworkUrl: candidate.artworkUrl || "", releaseDate: candidate.releaseDate, canonicalUrl: "", published: false, links: candidate.links, pixelEvents: { contentId: slug, contentName: candidate.title, artistName: candidate.artist }, seo: { title: `${candidate.title} by ${candidate.artist}`, description: `Choose your preferred music platform to listen to ${candidate.title} by ${candidate.artist}.`, ogImage: candidate.artworkUrl || "" }, trackingPixels: {}, headEntries: [] };
-    sessionStorage.setItem("cyniical-import-draft", JSON.stringify(draft)); router.push("/admin/new?import=1");
+    sessionStorage.setItem("cyniical-import-draft", JSON.stringify(draft)); router.push("/dashboard/new?import=1");
   };
   return <main className="admin-main">
     <div className="admin-title-row"><div><span className="admin-kicker">RELEASE CLONER</span><h1>Clone a smart link</h1><p>Paste a Songlink page to copy its metadata and platform destinations into an editable draft.</p></div></div>
