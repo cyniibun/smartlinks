@@ -1,6 +1,21 @@
 import { NextResponse } from "next/server";
 import { canDelete, canManage, getWorkspaceContext } from "@/lib/adminAuth";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { updateSmartLinkEditorPage } from "@/lib/linkPageEditor";
+
+export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}) {
+  const body=await request.json();const context=await getWorkspaceContext(body.workspaceId);
+  if(!context||!canManage(context.role))return NextResponse.json({error:"Forbidden"},{status:403});
+  try {
+    const page=await updateSmartLinkEditorPage((await params).id,context.workspace.id,body.page);
+    console.info("[tone-link:edit-page]",{pageId:page.id,workspaceId:context.workspace.id,slug:page.slug,published:page.published});
+    return NextResponse.json({page});
+  } catch(error) {
+    const message=error instanceof Error?error.message:"Unable to save Smart Link";
+    console.error("[tone-link:edit-page:error]",{pageId:(await params).id,workspaceId:context.workspace.id,message});
+    return NextResponse.json({error:message},{status:400});
+  }
+}
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){const body=await request.json();const context=await getWorkspaceContext(body.workspaceId);if(!context||!canManage(context.role))return NextResponse.json({error:"Forbidden"},{status:403});const db=getSupabaseAdmin();if(!db)return NextResponse.json({error:"Supabase unavailable"},{status:500});const result=await db.from("link_pages").update({published:Boolean(body.published),updated_at:new Date().toISOString()}).eq("id",(await params).id).eq("workspace_id",context.workspace.id).select("id,slug,published").single();if(result.error){console.error("[tone-link:update-page:error]",result.error.message);return NextResponse.json({error:result.error.message},{status:400})}await db.from("releases").update({import_status:result.data.published?"published":"approved",updated_at:new Date().toISOString()}).eq("id",body.releaseId).eq("workspace_id",context.workspace.id);return NextResponse.json({page:result.data})}
 
 export async function DELETE(request:Request,{params}:{params:Promise<{id:string}>}) {

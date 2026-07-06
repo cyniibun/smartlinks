@@ -1,0 +1,61 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArtworkPreview } from "@/components/admin/ArtworkPreview";
+import { HeadEntriesEditor } from "@/components/admin/HeadEntriesEditor";
+import type { PlatformType, SongLink } from "@/data/songs";
+import type { SmartLinkEditorLink, SmartLinkEditorPage } from "@/lib/linkPageEditor";
+import { detectPlatformUrl } from "@/lib/platformDetection";
+
+const tabs=["Overview","Platforms","Pixels","Header","SEO","Analytics","Preview"] as const;
+type Tab=typeof tabs[number];
+const sections:SongLink["section"][]=["listen","watch","buy","podcast","merch","tickets","other"];
+const presets:Array<{platform:PlatformType;label:string;section:SongLink["section"]}>=[
+  {platform:"spotify",label:"Spotify",section:"listen"},{platform:"apple_music",label:"Apple Music",section:"listen"},
+  {platform:"youtube",label:"YouTube",section:"watch"},{platform:"youtube_music",label:"YouTube Music",section:"listen"},
+  {platform:"soundcloud",label:"SoundCloud",section:"listen"},{platform:"amazon_music",label:"Amazon Music",section:"listen"},
+  {platform:"pandora",label:"Pandora",section:"listen"},{platform:"tidal",label:"TIDAL",section:"listen"},
+  {platform:"deezer",label:"Deezer",section:"listen"},{platform:"itunes",label:"iTunes",section:"buy"},
+  {platform:"amazon",label:"Amazon",section:"buy"},{platform:"other",label:"Custom",section:"other"},
+];
+
+export function SmartLinkEditor({workspaceId,initialPage,created=false}:{workspaceId:string;initialPage:SmartLinkEditorPage;created?:boolean}) {
+  const router=useRouter();const[page,setPage]=useState(initialPage);const[tab,setTab]=useState<Tab>("Overview");
+  const[saving,setSaving]=useState(false);const[error,setError]=useState("");const[notice,setNotice]=useState(created?(initialPage.published?"Smart Link published successfully.":"Draft created successfully. Configure the Smart Link below."):"");
+  const set=<K extends keyof SmartLinkEditorPage>(key:K,value:SmartLinkEditorPage[K])=>setPage(current=>({...current,[key]:value}));
+  const updateLink=(index:number,patch:Partial<SmartLinkEditorLink>)=>setPage(current=>({...current,links:current.links.map((link,i)=>i===index?{...link,...patch}:link)}));
+  const moveLink=(index:number,direction:-1|1)=>setPage(current=>{const target=index+direction;if(target<0||target>=current.links.length)return current;const links=[...current.links];[links[index],links[target]]=[links[target],links[index]];return{...current,links:links.map((link,i)=>({...link,order:i+1}))}});
+  const addPreset=(presetIndex:number)=>{const preset=presets[presetIndex]||presets[presets.length-1];setPage(current=>({...current,links:[...current.links,{...preset,url:"",enabled:true,order:current.links.length+1}]}))};
+  const updateUrl=(index:number,url:string)=>{const detected=detectPlatformUrl(url);updateLink(index,{url,...(detected.platform!=="other"?detected:{})})};
+  const save=async(published:boolean)=>{setSaving(true);setError("");setNotice("");try{const response=await fetch(`/api/admin/link-pages/${page.id}`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId,page:{...page,published}})});const json=await response.json();if(!response.ok)throw new Error(json.error||`Save failed (${response.status})`);setPage(json.page);setNotice(json.page.published?"Smart Link published successfully.":"Draft saved successfully.");router.refresh()}catch(reason){setError(reason instanceof Error?reason.message:"Unable to save Smart Link.")}finally{setSaving(false)}};
+  const previewUrl=page.published?`/${page.slug}`:`/preview/${page.id}`;
+
+  return <main className="admin-main smart-link-editor">
+    <div className="admin-title-row"><div><span className="admin-kicker">EDIT SMART LINK</span><h1>{page.title||"Untitled Smart Link"}</h1><p>{page.artist} · /{page.slug}</p></div><div className="editor-actions"><Link href={`/dashboard/${workspaceId}/link-pages`}>Back to links</Link><a href={previewUrl} target="_blank">Preview</a><button className="admin-secondary" disabled={saving} onClick={()=>void save(false)}>{saving?"Saving…":"Save draft"}</button><button className="admin-primary" disabled={saving} onClick={()=>void save(true)}>{saving?"Saving…":"Publish"}</button></div></div>
+    {notice&&<div className="admin-alert">{notice}</div>}{error&&<div className="admin-alert error">{error}</div>}
+    <nav className="editor-tabs" aria-label="Smart Link editor sections">{tabs.map(item=><button key={item} className={tab===item?"active":""} onClick={()=>setTab(item)}>{item}</button>)}</nav>
+
+    {tab==="Overview"&&<><section className="admin-panel"><div className="panel-title"><div><h2>Release details</h2><p className="muted">The release metadata displayed by this Smart Link.</p></div><span className={`status-pill ${page.published?"published":"draft"}`}>{page.published?"Published":"Draft"}</span></div><div className="editor-overview"><ArtworkPreview url={page.artworkUrl} title={`${page.title} artwork`}/><div className="form-grid">
+      <label>Slug<input value={page.slug} onChange={event=>set("slug",event.target.value.toLowerCase().replace(/[^a-z0-9-]/g,"-"))}/></label>
+      <label>Title<input value={page.title} onChange={event=>set("title",event.target.value)}/></label>
+      <label>Artist<input value={page.artist} onChange={event=>set("artist",event.target.value)}/></label>
+      <label>Subtitle<input value={page.subtitle} onChange={event=>set("subtitle",event.target.value)}/></label>
+      <label>Label name<input value={page.labelName} onChange={event=>set("labelName",event.target.value)}/></label>
+      <label>Release date<input type="date" value={page.releaseDate} onChange={event=>set("releaseDate",event.target.value)}/></label>
+      <label>Artwork URL<input value={page.artworkUrl} title={page.artworkUrl} onChange={event=>set("artworkUrl",event.target.value)}/></label>
+      <label>Background image URL<input value={page.backgroundImageUrl} title={page.backgroundImageUrl} onChange={event=>set("backgroundImageUrl",event.target.value)}/></label>
+      <label className="full">Canonical URL<input value={page.canonicalUrl} onChange={event=>set("canonicalUrl",event.target.value)} placeholder={`https://link.tone-link.com/${page.slug}`}/></label>
+    </div></div></section></>}
+
+    {tab==="Platforms"&&<section className="admin-panel"><div className="panel-title"><div><h2>Platform links</h2><p className="muted">Control destinations, labels, sections, visibility, and display order.</p></div><div className="platform-add"><select aria-label="Platform preset" defaultValue="0" id="platform-preset">{presets.map((preset,index)=><option key={`${preset.platform}-${index}`} value={index}>{preset.label}</option>)}</select><button className="admin-secondary" onClick={()=>{const select=document.getElementById("platform-preset") as HTMLSelectElement;addPreset(Number(select.value))}}>+ Add platform</button></div></div><div className="link-editor-list">{page.links.map((link,index)=><div className="link-editor smart-link-row" key={`${link.id||"new"}-${index}`}><span className="drag-order">{index+1}</span><select aria-label="Platform" value={link.platform} onChange={event=>{const preset=presets.find(item=>item.platform===event.target.value);updateLink(index,{platform:event.target.value as PlatformType,...(preset?{label:preset.label,section:preset.section}:{})})}}>{presets.map(item=><option key={item.platform} value={item.platform}>{item.label}</option>)}</select><input aria-label="Friendly label" value={link.label} onChange={event=>updateLink(index,{label:event.target.value})}/><input className="link-url" aria-label="Destination URL" value={link.url} title={link.url} onChange={event=>updateUrl(index,event.target.value)}/><select aria-label="Section" value={link.section} onChange={event=>updateLink(index,{section:event.target.value as SongLink["section"]})}>{sections.map(section=><option key={section}>{section}</option>)}</select><label className="toggle"><input type="checkbox" checked={link.enabled} onChange={event=>updateLink(index,{enabled:event.target.checked})}/> On</label><button onClick={()=>moveLink(index,-1)} disabled={index===0} aria-label="Move up">↑</button><button onClick={()=>moveLink(index,1)} disabled={index===page.links.length-1} aria-label="Move down">↓</button><button className="danger" onClick={()=>setPage(current=>({...current,links:current.links.filter((_,i)=>i!==index)}))}>Remove</button></div>)}</div>{!page.links.length&&<p className="empty-state">No destinations yet. Add a platform to begin.</p>}</section>}
+
+    {tab==="Pixels"&&<section className="admin-panel pixel-panel"><div className="panel-title"><div><h2>Campaign pixels</h2><p>Optional Smart Link overrides. Empty fields inherit the selected artist defaults.</p></div><span className="status-pill draft">Server stored</span></div><div className="form-grid pixel-grid"><label>TikTok Pixel ID<input value={page.tiktokPixelId} onChange={event=>set("tiktokPixelId",event.target.value)} placeholder="CXXXXXXXXXXXXXXXXX" autoComplete="off"/></label><label>Meta Pixel ID<input value={page.metaPixelId} onChange={event=>set("metaPixelId",event.target.value)} placeholder="123456789012345" autoComplete="off"/></label><label>GA4 Measurement ID<input value={page.gaMeasurementId} onChange={event=>set("gaMeasurementId",event.target.value)} placeholder="G-XXXXXXXXXX" autoComplete="off"/></label></div><p className="field-help">Campaign overrides take priority over artist defaults. Paste platform IDs, not complete script blocks.</p></section>}
+
+    {tab==="Header"&&<HeadEntriesEditor entries={page.headEntries} onChange={entries=>set("headEntries",entries)}/>} 
+    {tab==="SEO"&&<section className="admin-panel"><h2>Search & social</h2><div className="form-grid"><label>SEO title<input value={page.seoTitle} onChange={event=>set("seoTitle",event.target.value)}/></label><label>OG image<input value={page.ogImage} title={page.ogImage} onChange={event=>set("ogImage",event.target.value)}/></label><label className="full">SEO description<textarea value={page.seoDescription} onChange={event=>set("seoDescription",event.target.value)}/></label></div></section>}
+    {tab==="Analytics"&&<section className="admin-panel editor-callout"><h2>Smart Link analytics</h2><p>Visits, click-through rate, platforms, campaigns, referrers, and devices for this page.</p><Link className="admin-primary" href={`/dashboard/${workspaceId}/link-pages/${page.id}/analytics`}>Open analytics</Link></section>}
+    {tab==="Preview"&&<section className="admin-panel editor-callout"><h2>{page.published?"Public Smart Link":"Private draft preview"}</h2><p>{page.published?`https://link.tone-link.com/${page.slug}`:"Draft previews require an authenticated workspace account."}</p><a className="admin-primary" href={previewUrl} target="_blank">{page.published?"Open Smart Link":"Preview draft"}</a></section>}
+  </main>;
+}
