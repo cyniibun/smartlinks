@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/adminAuth";
 import { getSupabaseAdmin, getSupabasePublic } from "@/lib/supabase";
+import { DEFAULT_WORKSPACE_TIMEZONE } from "@/lib/timezone";
 
 export async function POST(request: Request) {
   const form = await request.formData();
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   let workspaceId=existing.data?.workspace_id as string|undefined;
   if (!existing.data) {
     const emailPrefix=email.split("@")[0]||"New user";const defaultName=`${emailPrefix}'s Workspace`;const finalName=workspaceName||defaultName;const workspaceSlug=`${finalName.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"workspace"}-${data.user.id.slice(0,6)}`;
-    const created = await admin.from("workspaces").insert({ name: finalName, slug: workspaceSlug, owner_id: data.user.id }).select("id").single();
+    const created = await admin.from("workspaces").insert({ name: finalName, slug: workspaceSlug, owner_id: data.user.id, timezone: DEFAULT_WORKSPACE_TIMEZONE, default_timezone: DEFAULT_WORKSPACE_TIMEZONE }).select("id").single();
     if(created.error||!created.data)return fail("Unable to create your workspace. Please try again.");workspaceId=created.data.id;
     const membership=await admin.from("workspace_members").insert({ workspace_id: workspaceId, user_id: data.user.id, role: "owner" });if(membership.error){await admin.from("workspaces").delete().eq("id",workspaceId);return fail("Unable to assign workspace ownership. Please try again.")}
   }

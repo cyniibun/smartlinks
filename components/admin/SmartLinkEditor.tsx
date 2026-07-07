@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArtworkPreview } from "@/components/admin/ArtworkPreview";
 import { HeadEntriesEditor } from "@/components/admin/HeadEntriesEditor";
+import { AsyncError } from "@/components/admin/AsyncError";
 import type { PlatformType, SongLink } from "@/data/songs";
 import type { SmartLinkEditorLink, SmartLinkEditorPage } from "@/lib/linkPageEditor";
 import { detectPlatformUrl } from "@/lib/platformDetection";
@@ -23,18 +24,18 @@ const presets:Array<{platform:PlatformType;label:string;section:SongLink["sectio
 
 export function SmartLinkEditor({workspaceId,initialPage,created=false}:{workspaceId:string;initialPage:SmartLinkEditorPage;created?:boolean}) {
   const router=useRouter();const[page,setPage]=useState(initialPage);const[tab,setTab]=useState<Tab>("Overview");
-  const[saving,setSaving]=useState(false);const[error,setError]=useState("");const[notice,setNotice]=useState(created?(initialPage.published?"Smart Link published successfully.":"Draft created successfully. Configure the Smart Link below."):"");
+  const[saving,setSaving]=useState(false);const[error,setError]=useState("");const[errorDetail,setErrorDetail]=useState("");const[notice,setNotice]=useState(created?(initialPage.published?"Smart Link published successfully.":"Draft created successfully. Configure the Smart Link below."):"");
   const set=<K extends keyof SmartLinkEditorPage>(key:K,value:SmartLinkEditorPage[K])=>setPage(current=>({...current,[key]:value}));
   const updateLink=(index:number,patch:Partial<SmartLinkEditorLink>)=>setPage(current=>({...current,links:current.links.map((link,i)=>i===index?{...link,...patch}:link)}));
   const moveLink=(index:number,direction:-1|1)=>setPage(current=>{const target=index+direction;if(target<0||target>=current.links.length)return current;const links=[...current.links];[links[index],links[target]]=[links[target],links[index]];return{...current,links:links.map((link,i)=>({...link,order:i+1}))}});
   const addPreset=(presetIndex:number)=>{const preset=presets[presetIndex]||presets[presets.length-1];setPage(current=>({...current,links:[...current.links,{...preset,url:"",enabled:true,order:current.links.length+1}]}))};
   const updateUrl=(index:number,url:string)=>{const detected=detectPlatformUrl(url);updateLink(index,{url,...(detected.platform!=="other"?detected:{})})};
-  const save=async(published:boolean)=>{setSaving(true);setError("");setNotice("");try{const response=await fetch(`/api/admin/link-pages/${page.id}`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId,page:{...page,published}})});const json=await response.json();if(!response.ok)throw new Error(json.error||`Save failed (${response.status})`);setPage(json.page);setNotice(json.page.published?"Smart Link published successfully.":"Draft saved successfully.");router.refresh()}catch(reason){setError(reason instanceof Error?reason.message:"Unable to save Smart Link.")}finally{setSaving(false)}};
+  const save=async(published:boolean)=>{setSaving(true);setError("");setErrorDetail("");setNotice("");try{const response=await fetch(`/api/admin/link-pages/${page.id}`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({workspaceId,page:{...page,published}})});const json=await response.json();if(!response.ok)throw new Error(json.error||`Save failed (${response.status})`);setPage(json.page);setNotice(json.page.published?"Smart Link published successfully.":"Draft saved successfully.");router.refresh()}catch(reason){setError("Unable to save Smart Link.");setErrorDetail(reason instanceof Error?reason.message:"Save failed.")}finally{setSaving(false)}};
   const previewUrl=page.published?`/${page.slug}`:`/preview/${page.id}`;
 
   return <main className="admin-main smart-link-editor">
     <div className="admin-title-row"><div><span className="admin-kicker">EDIT SMART LINK</span><h1>{page.title||"Untitled Smart Link"}</h1><p>{page.artist} · /{page.slug}</p></div><div className="editor-actions"><Link href={`/dashboard/${workspaceId}/link-pages`}>Back to links</Link><a href={previewUrl} target="_blank">Preview</a><button className="admin-secondary" disabled={saving} onClick={()=>void save(false)}>{saving?"Saving…":"Save draft"}</button><button className="admin-primary" disabled={saving} onClick={()=>void save(true)}>{saving?"Saving…":"Publish"}</button></div></div>
-    {notice&&<div className="admin-alert">{notice}</div>}{error&&<div className="admin-alert error">{error}</div>}
+    {notice&&<div className="admin-alert">{notice}</div>}{error&&<AsyncError message={error} detail={errorDetail}/>}
     <nav className="editor-tabs" aria-label="Smart Link editor sections">{tabs.map(item=><button key={item} className={tab===item?"active":""} onClick={()=>setTab(item)}>{item}</button>)}</nav>
 
     {tab==="Overview"&&<><section className="admin-panel"><div className="panel-title"><div><h2>Release details</h2><p className="muted">The release metadata displayed by this Smart Link.</p></div><span className={`status-pill ${page.published?"published":"draft"}`}>{page.published?"Published":"Draft"}</span></div><div className="editor-overview"><ArtworkPreview url={page.artworkUrl} title={`${page.title} artwork`}/><div className="form-grid">
