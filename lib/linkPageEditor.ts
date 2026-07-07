@@ -2,6 +2,7 @@ import "server-only";
 import type { HeadEntry, PlatformType, SongLink } from "@/data/songs";
 import { validateHeadEntries } from "@/lib/headEntries";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { resolveThemeSettings, systemThemes, type ThemeSettings } from "@/lib/themes";
 
 export type SmartLinkEditorLink = {
   id?: string;
@@ -33,7 +34,11 @@ export type SmartLinkEditorPage = {
   metaPixelId: string;
   gaMeasurementId: string;
   headEntries: HeadEntry[];
+  themeOverride: boolean;
+  themeId: string;
+  themeSettings: ThemeSettings;
   links: SmartLinkEditorLink[];
+  availableThemes: Array<{id:string;name:string;description?:string;is_system_theme:boolean;settings:ThemeSettings}>;
 };
 
 const sections = new Set(["listen", "watch", "buy", "podcast", "merch", "tickets", "other"]);
@@ -42,11 +47,19 @@ const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]
 export async function getSmartLinkEditorPage(id: string, workspaceId: string): Promise<SmartLinkEditorPage | null> {
   const db = getSupabaseAdmin(); if (!db) throw new Error("Supabase is not configured.");
   const result = await db.from("link_pages")
-    .select("*, page_links(*), releases(release_date,label_name)")
+    .select("*, page_links(*), releases(release_date,label_name), artists(default_theme_id), workspaces(default_theme_id)")
     .eq("id", id).eq("workspace_id", workspaceId).maybeSingle();
   if (result.error) throw new Error(result.error.message); if (!result.data) return null;
   const row = result.data as Record<string, unknown> & { page_links?: Array<Record<string, unknown>>; releases?: Record<string, unknown> | Array<Record<string, unknown>> | null };
   const release = Array.isArray(row.releases) ? row.releases[0] : row.releases;
+  const themesResult=await db.from("themes").select("id,name,description,is_system_theme,settings").or(`is_system_theme.eq.true,workspace_id.eq.${workspaceId}`).order("is_system_theme",{ascending:false}).order("name");
+  const availableThemes=(themesResult.data?.length?themesResult.data:systemThemes).map((theme:any)=>({...theme,settings:resolveThemeSettings(theme.settings)}));
+  const layout=(row.layout_settings || {}) as {themeId?:string;themeSettings?:unknown;themeOverride?:boolean;footerText?:string};
+  const artist=Array.isArray(row.artists)?row.artists[0]:row.artists as {default_theme_id?:string}|undefined;
+  const workspace=Array.isArray(row.workspaces)?row.workspaces[0]:row.workspaces as {default_theme_id?:string}|undefined;
+  const inheritedThemeId=artist?.default_theme_id||workspace?.default_theme_id||"minimal-dark";
+  const themeId=layout.themeOverride && layout.themeId ? layout.themeId : inheritedThemeId;
+  const themeRecord=availableThemes.find(theme=>theme.id===themeId);
   return {
     id: String(row.id), releaseId: row.release_id ? String(row.release_id) : undefined,
     slug: String(row.slug || ""), title: String(row.title || ""), subtitle: String(row.subtitle || ""),
@@ -56,6 +69,10 @@ export async function getSmartLinkEditorPage(id: string, workspaceId: string): P
     seoTitle: String(row.seo_title || ""), seoDescription: String(row.seo_description || ""), ogImage: String(row.og_image || ""),
     published: Boolean(row.published), tiktokPixelId: String(row.tiktok_pixel_id || ""), metaPixelId: String(row.meta_pixel_id || ""), gaMeasurementId: String(row.ga_measurement_id || ""),
     headEntries: validateHeadEntries(row.head_entries),
+    themeOverride: Boolean(layout.themeOverride),
+    themeId,
+    themeSettings: resolveThemeSettings(layout.themeSettings || themeRecord?.settings),
+    availableThemes,
     links: (row.page_links || []).map((link) => ({
       id: String(link.id), platform: String(link.platform) as PlatformType, label: String(link.label || ""), url: String(link.url || ""),
       section: String(link.section || "listen") as SongLink["section"], enabled: link.enabled !== false, order: Number(link.display_order || 0),
@@ -85,7 +102,7 @@ export async function updateSmartLinkEditorPage(id: string, workspaceId: string,
     seo_description: input.seoDescription.trim() || `Choose your preferred platform for ${input.title.trim()} by ${input.artist.trim()}.`,
     og_image: input.ogImage.trim() || input.artworkUrl.trim() || null, published: Boolean(input.published),
     tiktok_pixel_id: input.tiktokPixelId.trim() || null, meta_pixel_id: input.metaPixelId.trim() || null, ga_measurement_id: input.gaMeasurementId.trim() || null,
-    head_entries: headEntries, updated_at: new Date().toISOString(),
+    head_entries: headEntries, layout_settings: { themeOverride: input.themeOverride, themeId: input.themeOverride ? input.themeId : null, themeSettings: input.themeOverride ? input.themeSettings : null }, updated_at: new Date().toISOString(),
   };
   const updated = await db.from("link_pages").update(pageRow).eq("id", id).eq("workspace_id", workspaceId).select("id").single();
   if (updated.error) throw new Error(updated.error.message);
@@ -100,7 +117,7 @@ export async function updateSmartLinkEditorPage(id: string, workspaceId: string,
       if (inserted.error) throw new Error(inserted.error.message);
     }
   } catch (error) {
-    await db.from("link_pages").update({ slug: current.slug, title: current.title, subtitle: current.subtitle || null, artist_display_name: current.artist, label_name: current.labelName || null, artwork_url: current.artworkUrl || null, background_image_url: current.backgroundImageUrl || null, canonical_url: current.canonicalUrl, seo_title: current.seoTitle, seo_description: current.seoDescription, og_image: current.ogImage || null, published: current.published, tiktok_pixel_id: current.tiktokPixelId || null, meta_pixel_id: current.metaPixelId || null, ga_measurement_id: current.gaMeasurementId || null, head_entries: current.headEntries }).eq("id", id).eq("workspace_id", workspaceId);
+    await db.from("link_pages").update({ slug: current.slug, title: current.title, subtitle: current.subtitle || null, artist_display_name: current.artist, label_name: current.labelName || null, artwork_url: current.artworkUrl || null, background_image_url: current.backgroundImageUrl || null, canonical_url: current.canonicalUrl, seo_title: current.seoTitle, seo_description: current.seoDescription, og_image: current.ogImage || null, published: current.published, tiktok_pixel_id: current.tiktokPixelId || null, meta_pixel_id: current.metaPixelId || null, ga_measurement_id: current.gaMeasurementId || null, head_entries: current.headEntries, layout_settings:{themeOverride:current.themeOverride,themeId:current.themeOverride?current.themeId:null,themeSettings:current.themeOverride?current.themeSettings:null} }).eq("id", id).eq("workspace_id", workspaceId);
     if (current.releaseId) await db.from("releases").update({ title: current.title, primary_artist_name: current.artist, label_name: current.labelName || null, artwork_url: current.artworkUrl || null, release_date: current.releaseDate || null, import_status: current.published ? "published" : "approved", updated_at: new Date().toISOString() }).eq("id", current.releaseId).eq("workspace_id", workspaceId);
     await db.from("page_links").delete().eq("link_page_id", id).eq("workspace_id", workspaceId);
     if (current.links.length) await db.from("page_links").insert(current.links.map((link, index) => ({ workspace_id: workspaceId, link_page_id: id, platform: link.platform, label: link.label, url: link.url, section: link.section, enabled: link.enabled, display_order: index + 1, confidence: 1, source: "smart_link_editor_rollback", review_status: "approved" })));

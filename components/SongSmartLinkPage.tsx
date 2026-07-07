@@ -10,6 +10,7 @@ import { PlatformButton } from "@/components/PlatformButton";
 import { UtilityButton } from "@/components/UtilityButton";
 import { trackUtility, trackView } from "@/lib/tracking";
 import { copyText } from "@/lib/copyText";
+import { minimalDarkTheme, themeCssVars } from "@/lib/themes";
 
 export function SongSmartLinkPage({ song }: { song: SongPage }) {
   const [copied, setCopied] = useState(false);
@@ -49,7 +50,8 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
   };
   const openEmbed = () => { trackUtility(song, "Embed", "embed"); sendInternalEvent("embed_click"); setEmbedOpen(true); };
 
-  return <main className="smart-link-shell">
+  const theme = song.theme || minimalDarkTheme;
+  return <main className={`smart-link-shell theme-${theme.backgroundStyle} density-${theme.layoutDensity} buttons-${theme.buttonStyle} artwork-${theme.artworkSize} type-${theme.typographyScale}`} style={themeCssVars(theme)}>
     <Background artworkUrl={song.backgroundImageUrl ?? song.artworkUrl} />
     <div className="content-wrap">
       <section className="hero-card">
@@ -73,7 +75,7 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
         </section>;
       })}
 
-      <footer><a href="https://tone-link.com">tone-link</a><p>{song.footerText || "Independent music, on your frequency."}</p></footer>
+      {theme.footerVisible && <footer><a href="https://tone-link.com">tone-link</a><p>{song.footerText || "Independent music, on your frequency."}</p></footer>}
     </div>
     <EmbedModal song={song} open={embedOpen} onClose={() => setEmbedOpen(false)} />
   </main>;
