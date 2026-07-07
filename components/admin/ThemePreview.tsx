@@ -3,9 +3,9 @@
 import { minimalDarkTheme, type ThemeRecord, type ThemeSettings } from "@/lib/themes";
 import { themeCssVars } from "@/lib/themes";
 
-export function PublicLinkPreviewFrame({ theme, settings, showHeader = true, showFooter = true }: { theme: Pick<ThemeRecord, "name" | "description"> & { settings?: ThemeSettings }; settings?: ThemeSettings; showHeader?: boolean; showFooter?: boolean }) {
+export function PublicLinkPreviewFrame({ theme, settings, showHeader = true, showFooter = true, mode = "desktop" }: { theme: Pick<ThemeRecord, "name" | "description"> & { settings?: ThemeSettings }; settings?: ThemeSettings; showHeader?: boolean; showFooter?: boolean; mode?: "desktop" | "mobile" }) {
   settings ||= theme.settings || minimalDarkTheme;
-  return <div className={`preview-frame smart-link-shell theme-${settings.backgroundStyle} density-${settings.layoutDensity} buttons-${settings.buttonStyle} artwork-${settings.artworkSize} type-${settings.typographyScale}`} style={themeCssVars(settings)}>
+  return <div className={`preview-frame preview-${mode} smart-link-shell theme-${settings.backgroundStyle} density-${settings.layoutDensity} buttons-${settings.buttonStyle} artwork-${settings.artworkSize} type-${settings.typographyScale} hero-${settings.heroLayout} mobile-hero-${settings.mobileHeroLayout}`} style={themeCssVars(settings)}>
     <div className="background-wash" aria-hidden="true" />
     {showHeader&&<header className="public-brand-header"><a href="https://tone-link.com">tone-link</a></header>}
     <div className="content-wrap"><section className="hero-card"><div className="artwork-wrap preview-artwork"/><div className="hero-info"><div><h1>{theme.name}</h1><p>Sample Artist</p></div></div></section><section className="link-section"><div className="section-heading"><span>Choose your destination</span><h2>Listen</h2></div><div className="platform-grid"><button className="platform-button platform-spotify"><span className="platform-icon">♬</span><span className="platform-label">Spotify</span></button><button className="platform-button platform-apple_music"><span className="platform-icon"></span><span className="platform-label">Apple Music</span></button></div></section>{settings.footerVisible&&showFooter&&<footer><span className="powered-by">Powered by</span><a href="https://tone-link.com">tone-link</a></footer>}</div>

@@ -51,7 +51,7 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
   const openEmbed = () => { trackUtility(song, "Embed", "embed"); sendInternalEvent("embed_click"); setEmbedOpen(true); };
 
   const theme = song.theme || minimalDarkTheme;
-  return <main className={`smart-link-shell theme-${theme.backgroundStyle} density-${theme.layoutDensity} buttons-${theme.buttonStyle} artwork-${theme.artworkSize} type-${theme.typographyScale}`} style={themeCssVars(theme)}>
+  return <main className={`smart-link-shell theme-${theme.backgroundStyle} density-${theme.layoutDensity} buttons-${theme.buttonStyle} artwork-${theme.artworkSize} type-${theme.typographyScale} hero-${theme.heroLayout} mobile-hero-${theme.mobileHeroLayout}`} style={themeCssVars(theme)}>
     <Background artworkUrl={song.backgroundImageUrl ?? song.artworkUrl} />
     {song.showToneLinkHeader !== false && <header className="public-brand-header"><a href="https://tone-link.com">tone-link</a></header>}
     <div className="content-wrap">

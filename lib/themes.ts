@@ -3,6 +3,8 @@ export type ThemeSettings = {
   gradientPreset: "radial_top_right" | "radial_top_left" | "radial_bottom_right" | "radial_bottom_left" | "center_glow" | "dual_glow" | "vertical_wash" | "horizontal_wash" | "diagonal_sweep" | "subtle_vignette" | "flat";
   backgroundIntensity: "subtle" | "medium" | "strong";
   artworkSize: "compact" | "standard" | "large";
+  heroLayout: "large_artwork" | "compact_horizontal" | "minimal_text" | "artwork_left" | "artwork_top";
+  mobileHeroLayout: "inherit" | "compact_horizontal" | "minimal_text" | "artwork_left";
   cardRadius: "soft" | "rounded" | "pill";
   buttonStyle: "glass" | "solid" | "outline";
   typographyScale: "compact" | "standard" | "large";
@@ -31,6 +33,8 @@ export const minimalDarkTheme: ThemeSettings = {
   gradientPreset: "radial_top_right",
   backgroundIntensity: "medium",
   artworkSize: "standard",
+  heroLayout: "large_artwork",
+  mobileHeroLayout: "compact_horizontal",
   cardRadius: "rounded",
   buttonStyle: "glass",
   typographyScale: "standard",
@@ -63,6 +67,8 @@ export function resolveThemeSettings(value: unknown): ThemeSettings {
     ...input,
     gradientPreset: typeof input.gradientPreset === "string" ? input.gradientPreset : minimalDarkTheme.gradientPreset,
     backgroundIntensity: typeof input.backgroundIntensity === "string" ? input.backgroundIntensity : minimalDarkTheme.backgroundIntensity,
+    heroLayout: typeof input.heroLayout === "string" ? input.heroLayout : minimalDarkTheme.heroLayout,
+    mobileHeroLayout: typeof input.mobileHeroLayout === "string" ? input.mobileHeroLayout : minimalDarkTheme.mobileHeroLayout,
     accentColor: typeof input.accentColor === "string" && /^#[0-9a-fA-F]{6}$/.test(input.accentColor) ? input.accentColor : minimalDarkTheme.accentColor,
     secondaryAccentColor: typeof input.secondaryAccentColor === "string" && /^#[0-9a-fA-F]{6}$/.test(input.secondaryAccentColor) ? input.secondaryAccentColor : minimalDarkTheme.secondaryAccentColor,
     buttonTextColor: typeof input.buttonTextColor === "string" ? input.buttonTextColor : minimalDarkTheme.buttonTextColor,
