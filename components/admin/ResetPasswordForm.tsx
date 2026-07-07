@@ -1,10 +1,10 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 
-export function ResetPasswordForm({url,publishableKey}:{url:string;publishableKey:string}){
-  const supabase=useMemo(()=>url&&publishableKey?createClient(url,publishableKey,{auth:{flowType:"pkce",detectSessionInUrl:true,persistSession:true,autoRefreshToken:true}}):null,[url,publishableKey]);
+export function ResetPasswordForm(){
+  const supabase=useMemo(()=>createClient(),[]);
   const[ready,setReady]=useState(false);const[error,setError]=useState("");const[done,setDone]=useState(false);const[password,setPassword]=useState("");const[confirm,setConfirm]=useState("");
   useEffect(()=>{if(!supabase){setError("Supabase Auth is not configured.");setReady(true);return}let active=true;void supabase.auth.getSession().then(({data,error:sessionError})=>{if(!active)return;if(sessionError||!data.session)setError("This recovery link is invalid or expired. Request a new one.");setReady(true)});return()=>{active=false}},[supabase]);
   const submit=async(event:React.FormEvent)=>{event.preventDefault();setError("");if(password.length<8)return setError("Password must contain at least 8 characters.");if(password!==confirm)return setError("Passwords do not match.");if(!supabase)return setError("Supabase Auth is not configured.");const{error:updateError}=await supabase.auth.updateUser({password});if(updateError)return setError(updateError.message);await supabase.auth.signOut();setDone(true)};
