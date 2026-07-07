@@ -1,2 +1,2 @@
-import { AnalyticsDashboard } from "@/components/admin/AnalyticsDashboard";
-export default function DashboardAnalyticsPage() { return <AnalyticsDashboard />; }
+import { redirect } from "next/navigation";
+export default function DashboardAnalyticsPage() { redirect("/dashboard"); }

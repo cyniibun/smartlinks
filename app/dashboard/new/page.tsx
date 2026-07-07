@@ -1,2 +1,2 @@
-import { SongEditor } from "@/components/admin/SongEditor";
-export default function DashboardNewPage() { return <SongEditor />; }
+import { redirect } from "next/navigation";
+export default function DashboardNewPage() { redirect("/dashboard"); }

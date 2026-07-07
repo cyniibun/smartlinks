@@ -1,2 +1,2 @@
-import { ImportTool } from "@/components/admin/ImportTool";
-export default function DashboardImportPage() { return <ImportTool />; }
+import { redirect } from "next/navigation";
+export default function DashboardImportPage() { redirect("/dashboard"); }
