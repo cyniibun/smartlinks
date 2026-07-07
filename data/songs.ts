@@ -35,6 +35,8 @@ export type SongPage = {
   releaseDate?: string;
   labelName?: string;
   footerText?: string;
+  showToneLinkHeader?: boolean;
+  showPoweredByFooter?: boolean;
   theme?: import("@/lib/themes").ThemeSettings;
   workspaceId?: string;
   artistId?: string;

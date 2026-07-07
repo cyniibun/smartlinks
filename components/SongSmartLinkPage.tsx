@@ -53,6 +53,7 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
   const theme = song.theme || minimalDarkTheme;
   return <main className={`smart-link-shell theme-${theme.backgroundStyle} density-${theme.layoutDensity} buttons-${theme.buttonStyle} artwork-${theme.artworkSize} type-${theme.typographyScale}`} style={themeCssVars(theme)}>
     <Background artworkUrl={song.backgroundImageUrl ?? song.artworkUrl} />
+    {song.showToneLinkHeader !== false && <header className="public-brand-header"><a href="https://tone-link.com">tone-link</a></header>}
     <div className="content-wrap">
       <section className="hero-card">
         <div className="artwork-wrap"><Image src={song.artworkUrl} alt={`${song.title} cover artwork`} width={900} height={900} priority unoptimized /></div>
@@ -75,7 +76,7 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
         </section>;
       })}
 
-      {theme.footerVisible && <footer><a href="https://tone-link.com">tone-link</a><p>{song.footerText || "Independent music, on your frequency."}</p></footer>}
+      {theme.footerVisible && song.showPoweredByFooter !== false && <footer><span className="powered-by">Powered by</span><a href="https://tone-link.com">tone-link</a>{song.footerText && <p>{song.footerText}</p>}</footer>}
     </div>
     <EmbedModal song={song} open={embedOpen} onClose={() => setEmbedOpen(false)} />
   </main>;

@@ -5,6 +5,11 @@ export type ThemeSettings = {
   buttonStyle: "glass" | "solid" | "outline";
   typographyScale: "compact" | "standard" | "large";
   accentColor: string;
+  buttonTextColor: string;
+  buttonBackgroundColor: string;
+  buttonBorderColor: string;
+  mutedTextColor: string;
+  autoButtonContrast: boolean;
   layoutDensity: "compact" | "standard" | "spacious";
   footerVisible: boolean;
   blurIntensity: "none" | "soft" | "strong";
@@ -25,6 +30,11 @@ export const minimalDarkTheme: ThemeSettings = {
   buttonStyle: "glass",
   typographyScale: "standard",
   accentColor: "#df5d93",
+  buttonTextColor: "#f7f3f5",
+  buttonBackgroundColor: "rgba(255,255,255,.055)",
+  buttonBorderColor: "rgba(255,255,255,.1)",
+  mutedTextColor: "#aaa8ad",
+  autoButtonContrast: true,
   layoutDensity: "standard",
   footerVisible: true,
   blurIntensity: "strong",
@@ -46,13 +56,30 @@ export function resolveThemeSettings(value: unknown): ThemeSettings {
     ...minimalDarkTheme,
     ...input,
     accentColor: typeof input.accentColor === "string" && /^#[0-9a-fA-F]{6}$/.test(input.accentColor) ? input.accentColor : minimalDarkTheme.accentColor,
+    buttonTextColor: typeof input.buttonTextColor === "string" ? input.buttonTextColor : minimalDarkTheme.buttonTextColor,
+    buttonBackgroundColor: typeof input.buttonBackgroundColor === "string" ? input.buttonBackgroundColor : minimalDarkTheme.buttonBackgroundColor,
+    buttonBorderColor: typeof input.buttonBorderColor === "string" ? input.buttonBorderColor : minimalDarkTheme.buttonBorderColor,
+    mutedTextColor: typeof input.mutedTextColor === "string" ? input.mutedTextColor : minimalDarkTheme.mutedTextColor,
+    autoButtonContrast: input.autoButtonContrast !== false,
   };
 }
 
 type CssVars = Record<string, string>;
+function readableTextColor(background: string) {
+  const hex = background.match(/^#([0-9a-fA-F]{6})$/)?.[1];
+  if (!hex) return "#f7f3f5";
+  const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16);
+  const luminance=(0.2126*r+0.7152*g+0.0722*b)/255;
+  return luminance > 0.55 ? "#08080a" : "#ffffff";
+}
 export function themeCssVars(settings: ThemeSettings): CssVars {
+  const buttonBackground = settings.buttonStyle === "solid" ? settings.buttonBackgroundColor || settings.accentColor : settings.buttonBackgroundColor;
   return {
     "--theme-accent": settings.accentColor,
+    "--theme-button-text": settings.autoButtonContrast ? readableTextColor(buttonBackground || settings.accentColor) : settings.buttonTextColor,
+    "--theme-button-bg": buttonBackground || "rgba(255,255,255,.055)",
+    "--theme-button-border": settings.buttonBorderColor || "rgba(255,255,255,.1)",
+    "--theme-muted": settings.mutedTextColor,
     "--theme-radius": settings.cardRadius === "pill" ? "34px" : settings.cardRadius === "soft" ? "18px" : "30px",
     "--theme-button-radius": settings.cardRadius === "pill" ? "999px" : "15px",
     "--theme-blur": settings.blurIntensity === "none" ? "0px" : settings.blurIntensity === "soft" ? "36px" : "90px",

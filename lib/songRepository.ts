@@ -60,8 +60,8 @@ function fromRow(row: SongRow): SongPage {
 }
 
 async function resolveTheme(row: LinkPageRow,workspaceDefaults?:WorkspaceDefaults|null) {
-  const supabase=getSupabaseAdmin();const layout=row.layout_settings as {themeId?:string;themeSettings?:unknown}|null;const themeId=layout?.themeId||row.artists?.default_theme_id||workspaceDefaults?.default_theme_id||"minimal-dark";
-  if(layout?.themeSettings)return resolveThemeSettings(layout.themeSettings);
+  const supabase=getSupabaseAdmin();const layout=row.layout_settings as {themeId?:string;selectedThemeId?:string;themeSettings?:unknown;themeOverride?:unknown;themeMode?:string}|null;const override=layout?.themeMode==="override";const themeId=(override?(layout?.selectedThemeId||layout?.themeId):null)||row.artists?.default_theme_id||workspaceDefaults?.default_theme_id||"minimal-dark";
+  if(override&&(layout?.themeOverride||layout?.themeSettings))return resolveThemeSettings(layout.themeOverride||layout.themeSettings);
   if(!supabase)return minimalDarkTheme;
   const result=await supabase.from("themes").select("settings").eq("id",themeId).maybeSingle();
   return resolveThemeSettings(result.data?.settings);
@@ -76,6 +76,8 @@ async function fromLinkPage(row: LinkPageRow,workspaceDefaults?:WorkspaceDefault
     title: row.title, artist, subtitle: row.subtitle ?? undefined,
     labelName: row.label_name || row.releases?.label_name || row.artists?.default_label_name || undefined,
     footerText: (row.layout_settings as { footerText?: string } | null)?.footerText || row.artists?.default_footer_text || undefined,
+    showToneLinkHeader: (row.layout_settings as { branding?: { showToneLinkHeader?: boolean } } | null)?.branding?.showToneLinkHeader !== false,
+    showPoweredByFooter: (row.layout_settings as { branding?: { showPoweredByFooter?: boolean } } | null)?.branding?.showPoweredByFooter !== false,
     theme: await resolveTheme(row, workspaceDefaults),
     artworkUrl: row.artwork_url ?? "", backgroundImageUrl: row.background_image_url ?? undefined,
     releaseDate: row.releases?.release_date ?? undefined, canonicalUrl, shortUrl: canonicalUrl, published: row.published,
