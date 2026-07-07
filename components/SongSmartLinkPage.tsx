@@ -73,7 +73,7 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
         </section>;
       })}
 
-      <footer><a href="https://tone-link.com">tone-link</a><p>Independent music, on your frequency.</p></footer>
+      <footer><a href="https://tone-link.com">tone-link</a><p>{song.footerText || "Independent music, on your frequency."}</p></footer>
     </div>
     <EmbedModal song={song} open={embedOpen} onClose={() => setEmbedOpen(false)} />
   </main>;

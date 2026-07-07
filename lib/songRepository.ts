@@ -18,7 +18,8 @@ type LinkPageRow = {
   seo_title: string | null; seo_description: string | null; og_image: string | null; published: boolean;
   tiktok_pixel_id: string | null; meta_pixel_id: string | null; ga_measurement_id: string | null; head_entries: unknown;
   page_links?: Array<LinkRow & { confidence?: number; review_status?: string }>;
-  artists?: { name: string; default_label_name: string | null; default_tiktok_pixel_id: string | null; default_meta_pixel_id: string | null; default_ga_measurement_id: string | null; default_head_entries: unknown } | null;
+  layout_settings?: unknown;
+  artists?: { name: string; default_label_name: string | null; default_tiktok_pixel_id: string | null; default_meta_pixel_id: string | null; default_ga_measurement_id: string | null; default_head_entries: unknown; default_footer_text?: string | null } | null;
   releases?: { release_date: string | null; label_name: string | null } | null;
 };
 type WorkspaceDefaults={default_tiktok_pixel_id:string|null;default_meta_pixel_id:string|null;default_ga_measurement_id:string|null};
@@ -65,6 +66,7 @@ function fromLinkPage(row: LinkPageRow,workspaceDefaults?:WorkspaceDefaults|null
     releaseId: row.release_id ?? undefined, linkPageId: row.id, slug: row.slug,
     title: row.title, artist, subtitle: row.subtitle ?? undefined,
     labelName: row.label_name || row.releases?.label_name || row.artists?.default_label_name || undefined,
+    footerText: (row.layout_settings as { footerText?: string } | null)?.footerText || row.artists?.default_footer_text || undefined,
     artworkUrl: row.artwork_url ?? "", backgroundImageUrl: row.background_image_url ?? undefined,
     releaseDate: row.releases?.release_date ?? undefined, canonicalUrl, shortUrl: canonicalUrl, published: row.published,
     trackingPixels: {
@@ -100,7 +102,7 @@ export async function getSongBySlug(slug: string, includeUnpublished = false, wo
   noStore();
   const supabase = getSupabaseAdmin();
   if (!supabase) return fallbackSongs.find((song) => song.slug === slug && (includeUnpublished || song.published !== false));
-  let pageQuery = supabase.from("link_pages").select("*, page_links(*), artists(name,default_label_name,default_tiktok_pixel_id,default_meta_pixel_id,default_ga_measurement_id,default_head_entries), releases(release_date,label_name)").eq("slug", slug);
+  let pageQuery = supabase.from("link_pages").select("*, page_links(*), artists(name,default_label_name,default_tiktok_pixel_id,default_meta_pixel_id,default_ga_measurement_id,default_head_entries,default_footer_text), releases(release_date,label_name)").eq("slug", slug);
   if (workspaceId) pageQuery = pageQuery.eq("workspace_id", workspaceId);
   if (!includeUnpublished) pageQuery = pageQuery.eq("published", true);
   const page = await pageQuery.maybeSingle();
@@ -118,7 +120,7 @@ export async function getSongByLinkPageId(id: string, workspaceId: string): Prom
   const supabase = getSupabaseAdmin();
   if (!supabase) return undefined;
   const result = await supabase.from("link_pages")
-    .select("*, page_links(*), artists(name,default_label_name,default_tiktok_pixel_id,default_meta_pixel_id,default_ga_measurement_id,default_head_entries), releases(release_date,label_name)")
+    .select("*, page_links(*), artists(name,default_label_name,default_tiktok_pixel_id,default_meta_pixel_id,default_ga_measurement_id,default_head_entries,default_footer_text), releases(release_date,label_name)")
     .eq("id", id).eq("workspace_id", workspaceId).maybeSingle();
   if (result.error) throw new Error(result.error.message);
   if(!result.data)return undefined;const defaults=await supabase.from("workspaces").select("default_tiktok_pixel_id,default_meta_pixel_id,default_ga_measurement_id").eq("id",workspaceId).maybeSingle();return fromLinkPage(result.data as unknown as LinkPageRow,defaults.error?null:defaults.data);

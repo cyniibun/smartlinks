@@ -34,6 +34,7 @@ export type SongPage = {
   backgroundImageUrl?: string;
   releaseDate?: string;
   labelName?: string;
+  footerText?: string;
   workspaceId?: string;
   artistId?: string;
   releaseId?: string;
