@@ -29,8 +29,8 @@ export function CheckEmailForm({ initialEmail = "" }: { initialEmail?: string })
   };
 
   return <main className="admin-login">
-    <form onSubmit={event => void resend(event)} className="admin-login-card">
-      <span className="admin-kicker">tone-link</span>
+    <form onSubmit={event => void resend(event)} className="admin-login-card auth-card">
+      <div className="auth-brand"><span>tone-link</span></div>
       <h1>Check your email</h1>
       <p>Confirm your email address before opening your dashboard.</p>
       {notice && <div className="admin-alert">{notice}</div>}

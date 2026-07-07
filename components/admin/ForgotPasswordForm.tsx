@@ -32,9 +32,9 @@ export function ForgotPasswordForm({ initialError = "", sent = false }: { initia
     }
   };
 
-  return <main className="admin-login"><form onSubmit={event => void submit(event)} className="admin-login-card">
-    <span className="admin-kicker">tone-link</span><h1>Reset your password</h1><p>Enter your account email and we’ll send a secure recovery link.</p>
-    {done && <div className="admin-alert">If an account exists for that email, a password-reset link has been sent.</div>}
+  return <main className="admin-login"><form onSubmit={event => void submit(event)} className="admin-login-card auth-card">
+    <div className="auth-brand"><span>tone-link</span></div><h1>Reset your password</h1><p>Enter your account email and we’ll send a secure recovery link.</p>
+    {done && <div className="admin-alert">Check your email for a password reset link.</div>}
     {error && <AsyncError message={error} detail={detail} onRetry={email ? () => void submit({ preventDefault() {} } as React.FormEvent) : undefined} />}
     <label>Email<input value={email} onChange={event => setEmail(event.target.value)} name="email" type="email" autoComplete="email" required /></label>
     <button className="admin-primary" disabled={busy || !email}>{busy ? "Sending…" : "Send reset link"}</button>
