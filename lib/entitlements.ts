@@ -1,6 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import type { WorkspaceRole } from "@/lib/adminAuth";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { isPaidSubscriptionStatus } from "@/lib/stripeBilling";
 
 export type PlanId = "free" | "basic" | "pro" | "enterprise" | "developer";
 export type FeatureKey =
@@ -88,7 +89,10 @@ export async function getWorkspaceEntitlements(workspaceId: string, user?: Pick<
   if (developer) return entitlementsForPlan("developer", "active", false, true);
 
   const subscription = await db.from("workspace_subscriptions").select("plan,status").eq("workspace_id", workspaceId).maybeSingle();
-  if (!subscription.error && subscription.data) return entitlementsForPlan(normalizePlan(subscription.data.plan), String(subscription.data.status || "active"), true, false);
+  if (!subscription.error && subscription.data) {
+    const status = String(subscription.data.status || "active");
+    return entitlementsForPlan(isPaidSubscriptionStatus(status) ? normalizePlan(subscription.data.plan) : "free", status, true, false);
+  }
 
   const workspace = await db.from("workspaces").select("plan_id").eq("id", workspaceId).maybeSingle();
   return entitlementsForPlan(normalizePlan(workspace.data?.plan_id), "active", true, false);
