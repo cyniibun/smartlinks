@@ -36,6 +36,8 @@ export type SmartLinkEditorPage = {
   headEntries: HeadEntry[];
   themeOverride: boolean;
   themeId: string;
+  inheritedThemeId: string;
+  inheritedThemeSource: "Artist Default" | "Workspace Default" | "System Default";
   themeSettings: ThemeSettings;
   links: SmartLinkEditorLink[];
   availableThemes: Array<{id:string;name:string;description?:string;is_system_theme:boolean;settings:ThemeSettings}>;
@@ -58,6 +60,7 @@ export async function getSmartLinkEditorPage(id: string, workspaceId: string): P
   const artist=Array.isArray(row.artists)?row.artists[0]:row.artists as {default_theme_id?:string}|undefined;
   const workspace=Array.isArray(row.workspaces)?row.workspaces[0]:row.workspaces as {default_theme_id?:string}|undefined;
   const inheritedThemeId=artist?.default_theme_id||workspace?.default_theme_id||"minimal-dark";
+  const inheritedThemeSource=artist?.default_theme_id?"Artist Default":workspace?.default_theme_id?"Workspace Default":"System Default";
   const themeId=layout.themeOverride && layout.themeId ? layout.themeId : inheritedThemeId;
   const themeRecord=availableThemes.find(theme=>theme.id===themeId);
   return {
@@ -71,6 +74,8 @@ export async function getSmartLinkEditorPage(id: string, workspaceId: string): P
     headEntries: validateHeadEntries(row.head_entries),
     themeOverride: Boolean(layout.themeOverride),
     themeId,
+    inheritedThemeId,
+    inheritedThemeSource,
     themeSettings: resolveThemeSettings(layout.themeSettings || themeRecord?.settings),
     availableThemes,
     links: (row.page_links || []).map((link) => ({
