@@ -1,75 +1,399 @@
-# tone-link
+# ToneLink
 
-Self-hosted music smart links and release analytics for `link.tone-link.com`.
-
-## Features
-
-- Branded public smart-link and embed pages
-- Supabase Auth accounts with isolated organization workspaces and roles
-- Create, edit, duplicate, publish, unpublish, preview, and delete releases
-- Reorderable platform links
-- Songlink/Odesli URL resolution
-- Spotify search when API credentials are supplied
-- Apple Music search without additional credentials
-- Supabase release storage and click/visit analytics
-- TikTok Pixel, Meta Pixel, and GA4 events
-- Optional TikTok, Meta, and GA4 pixel IDs configured per release
-- Guarded per-release header meta tags, external scripts, and validated inline JavaScript
-- Songlink URL cloning with metadata and multi-platform link import
-
-## Local development
-
-1. Run `npm install`.
-2. Copy `.env.example` to `.env.local`.
-3. Set the Supabase values below.
-4. Run `supabase/schema.sql`, the 20260705 migrations, then `supabase/migrations/20260706_multi_tenant_auth.sql` in the Supabase SQL editor.
-5. Run `npm run dev` and open `http://localhost:3000/signup` or `/login`.
-
-## Environment variables
+ToneLink is a self-hosted music smart-link platform for artists, labels, creators, and campaign teams. It creates owned landing pages such as:
 
 ```txt
-SUPABASE_URL=
-SUPABASE_SECRET_KEY=
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
-EVENT_HASH_SALT=
-OWNER_EMAIL=joe@cyniical.productions
-BYPASS_BILLING=false
-
-# Optional import enhancement
-SPOTIFY_CLIENT_ID=
-SPOTIFY_CLIENT_SECRET=
-
-# Optional advertising and analytics pixels
-NEXT_PUBLIC_TIKTOK_PIXEL_ID=
-NEXT_PUBLIC_META_PIXEL_ID=
-NEXT_PUBLIC_GA_MEASUREMENT_ID=
+https://link.tone-link.com/watching-me
 ```
 
-Keep `SUPABASE_SECRET_KEY` and `EVENT_HASH_SALT` server-only. Never prefix either with `NEXT_PUBLIC_`. The publishable key is safe for Supabase Auth; RLS is the database security boundary.
+Each page gives fans a clean destination picker while giving the workspace owner control over tracking pixels, platform links, campaign attribution, page styling, and analytics.
 
-Without Supabase credentials, the bundled `Watching Me` release remains available as a read-only fallback. Dashboard authentication, writes, and internal analytics require Supabase.
+ToneLink is designed to replace dependency on third-party smart-link tools while keeping the workflow fast enough for real release campaigns.
 
-## Supabase setup
+## What ToneLink does
 
-Run [supabase/schema.sql](supabase/schema.sql), the 20260705 migrations, and then [20260706_multi_tenant_auth.sql](supabase/migrations/20260706_multi_tenant_auth.sql). The final migration creates profiles, workspaces, membership roles, artists, campaigns, workspace foreign keys, and RLS policies.
+- Creates public smart-link pages for songs, albums, podcasts, presaves, merch, tickets, and other campaign destinations.
+- Imports release metadata and platform links from search, Apple Music, Spotify, and Songlink/Odesli-style URLs.
+- Lets teams review imported matches before publishing.
+- Tracks page views, outbound platform clicks, shares, copy actions, UTM data, referrers, devices, and campaign performance.
+- Supports TikTok Pixel, Meta Pixel, Google Analytics 4, and safe custom header entries.
+- Provides workspace, artist, and smart-link-level defaults.
+- Supports reusable themes and artist templates.
+- Uses workspace-level subscriptions and feature entitlements so future billing can be added cleanly.
 
-For an existing database, run [supabase/migrations/20260705_add_campaign_integrations.sql](supabase/migrations/20260705_add_campaign_integrations.sql) once in the Supabase SQL Editor. It safely adds both per-release pixels and guarded custom page-header entries.
+## Core concepts
 
-Create `joe@cyniical.productions` in Supabase Authentication before running the multi-tenant migration. The migration then creates the `Cyniical Productions` workspace, grants that account the `owner` role, and assigns existing releases and events to it. If the user is created afterward, rerun the migration; it is idempotent.
+ToneLink is organized around workspaces.
 
-Then run [20260706_tonelink_expansion.sql](supabase/migrations/20260706_tonelink_expansion.sql). It adds first-class artists, releases, link pages, confidence-reviewed page links, analytics dimensions, plan limits, and an idempotent legacy-song backfill. Set `BYPASS_BILLING=true` for the internal owner workspace while pricing is still being tested.
+```txt
+User
+└── Workspace
+    ├── Members
+    ├── Artists
+    ├── Releases
+    ├── Smart Links
+    ├── Themes
+    ├── Pixels
+    ├── Analytics
+    └── Subscription / Entitlements
+```
 
-Finally run [20260706_owner_billing_bypass.sql](supabase/migrations/20260706_owner_billing_bypass.sql). It permanently marks `joe@cyniical.productions` as billing-exempt and prevents authenticated users from editing their own billing entitlement. Future billing checks should call `hasBillingBypass(userId)` before applying plan limits or Stripe paywalls.
+### User
 
-## Vercel and DNS
+Authentication is handled by Supabase Auth. A user is only an identity: email, login provider, and session.
 
-Import this repository into Vercel and add the environment variables for Production, Preview, and Development as appropriate. Add `link.tone-link.com` as the Vercel project domain.
+Users do not directly own billing plans. Plans belong to workspaces.
 
-At the DNS provider for `tone-link.com`, point only the `link` subdomain at the CNAME supplied by Vercel—commonly `cname.vercel-dns.com`. Do not change the root or `www` records.
+### Workspace
 
-## Import behavior
+A workspace is the main container for an organization, artist team, label, or creator. All artists, releases, smart links, analytics, themes, and settings are scoped to a workspace.
 
-- Pasted release URLs try Songlink/Odesli first and always retain a manual-link fallback.
-- Text searches use Spotify when credentials exist and Apple Music independently.
-- Provider failures do not block manual release creation.
+New users receive their own workspace named from their email prefix. Existing internal workspaces remain unchanged.
+
+### Membership
+
+Users join workspaces through `workspace_members`.
+
+Supported roles:
+
+- `developer`
+- `owner`
+- `admin`
+- `member`
+- `viewer`
+
+The `developer` role is internal and bypasses feature limits and billing gates for product development.
+
+### Subscription and entitlements
+
+ToneLink uses workspace-level feature checks instead of scattered plan checks.
+
+The app should ask:
+
+```ts
+hasFeature(workspaceId, "theme_studio")
+```
+
+not:
+
+```ts
+plan === "pro"
+```
+
+Plans map to feature bundles. Features include:
+
+- `theme_studio`
+- `custom_themes`
+- `custom_domains`
+- `advanced_analytics`
+- `analytics_export`
+- `unlimited_links`
+- `unlimited_artists`
+- `remove_branding`
+- `team_members`
+- `api_access`
+- `podcast_pages`
+- `artist_bio_pages`
+- `presaves`
+
+This keeps Stripe integration separate from product behavior.
+
+## Main user workflows
+
+### Create a smart link from search
+
+1. Open the dashboard.
+2. Go to Create/Search.
+3. Search by artist and release title, or paste a Spotify, Apple Music, YouTube, or Songlink URL.
+4. Pick the correct release.
+5. Review metadata, artwork, slug, artist assignment, release type, and platform links.
+6. Save as draft or publish.
+7. After publishing, open the Smart Link Editor for deeper configuration.
+
+The search flow is intentionally lightweight. It is for importing and publishing quickly, not for managing every advanced page setting.
+
+### Edit a smart link
+
+Open a smart link from the dashboard list. The editor is organized into tabs:
+
+- Overview
+- Platforms
+- Theme
+- Pixels
+- Header
+- SEO
+- Analytics
+- Preview
+
+Use this editor for long-term page management after the initial import/review step.
+
+### Configure platform destinations
+
+In the Platforms tab, each destination has:
+
+- platform
+- friendly label
+- URL
+- section
+- enabled state
+- order controls
+- remove action
+
+Sections include:
+
+- listen
+- watch
+- buy
+- podcast
+- merch
+- tickets
+- other
+
+Platform URL detection normalizes common links, so a Spotify URL should stay categorized as Spotify under Listen.
+
+### Configure pixels
+
+Pixels cascade by priority:
+
+```txt
+Smart Link override
+→ Artist default
+→ Workspace default
+→ none
+```
+
+Supported pixel IDs:
+
+- TikTok Pixel ID
+- Meta Pixel ID
+- GA4 Measurement ID
+
+Smart-link-specific campaign pixels should be entered in the Smart Link Editor. Artist and workspace defaults are managed from Settings.
+
+### Add safe page-header entries
+
+The Header tab supports controlled campaign scripts and verification tags:
+
+- meta tags
+- external script URLs
+- inline JavaScript
+
+Guardrails are intentionally strict. Header entries should support campaign platform requirements without allowing page-breaking or destructive code.
+
+### Use Theme Studio
+
+Theme Studio lives in Settings → Themes.
+
+System themes are visible to all users. Custom themes require the relevant workspace entitlement.
+
+Typical workflow:
+
+1. Preview a system theme.
+2. Duplicate it.
+3. Edit the custom copy.
+4. Set it as the workspace default, artist default, or smart-link theme.
+
+Theme inheritance is:
+
+```txt
+Smart Link override
+→ Smart Link selected theme
+→ Artist default theme
+→ Workspace default theme
+→ Minimal Dark
+```
+
+## Analytics
+
+ToneLink records internal analytics in Supabase. Public pages and button actions send events to internal endpoints, and optional external pixels fire in the browser.
+
+Tracked event types include:
+
+- `page_view`
+- `view_content`
+- `platform_click`
+- `copy_url`
+- `share`
+- `embed_click`
+- `campaign_click`
+
+Analytics support:
+
+- total visits
+- total outbound clicks
+- CTR
+- platform breakdown
+- top smart links
+- referrers and UTM sources
+- campaign performance
+- device/browser summary
+- recent event log
+- CSV export when entitled
+
+UTM values are normalized before storage. Placeholder campaign values such as `__CAMPAIGN_NAME__` are treated as empty instead of being displayed to users.
+
+## Import and resolver methodology
+
+ToneLink does not blindly trust one provider.
+
+The resolver workflow is:
+
+1. Normalize the selected source into canonical metadata.
+2. Preserve the original source platform link.
+3. Resolve outward to other providers.
+4. Merge and dedupe by platform and section.
+5. Send everything to review before publish.
+
+Current provider behavior:
+
+- Apple Music search can provide metadata, Apple Music links, iTunes links, artwork, release date, and sometimes ISRC.
+- Spotify uses the Web API with Client Credentials for public catalog search.
+- Spotify matching prefers ISRC when available, then falls back to title and artist similarity.
+- Songlink/Odesli-style URLs can accelerate multi-platform cloning.
+- SoundCloud is treated conservatively unless a confident URL is available; manual review is preferred over fake matches.
+
+The resolver is intentionally review-first. Cross-platform matches should not auto-publish unless confidence is high.
+
+## Code structure
+
+```txt
+app/
+  [slug]/                         Public smart-link pages
+  auth/callback/                  Supabase OAuth callback
+  dashboard/                      Authenticated workspace app
+  api/                            Route handlers
+
+components/
+  admin/                          Dashboard, editor, analytics, auth UI
+  PlatformButton.tsx              Public outbound click behavior
+  SongSmartLinkPage.tsx           Public smart-link rendering
+
+lib/
+  adminAuth.ts                    Workspace session and role helpers
+  authBootstrap.ts                Profile/workspace bootstrap
+  entitlements.ts                 Workspace feature resolver
+  linkPageEditor.ts               Smart Link Editor read/write adapter
+  resolver.ts                     Cross-platform release resolver
+  spotify.ts                      Spotify API client
+  themes.ts                       System themes and theme normalization
+  utm.ts                          UTM cleanup/display helpers
+
+supabase/
+  schema.sql
+  migrations/                     Database migrations and RLS changes
+```
+
+## External services
+
+### Supabase
+
+Supabase provides:
+
+- Auth
+- Postgres
+- Row Level Security
+- analytics/event storage
+- workspace-scoped data
+
+Most privileged database writes go through server-side route handlers using the server key. Public pages only expose data that is safe to render publicly.
+
+Production OAuth depends on the app resolving the correct public site URL. In Vercel, set:
+
+```txt
+NEXT_PUBLIC_SITE_URL=https://link.tone-link.com
+```
+
+Supabase Auth URL configuration should be:
+
+```txt
+Site URL:
+https://link.tone-link.com
+
+Redirect URLs:
+https://link.tone-link.com/auth/callback
+http://localhost:3000/auth/callback
+http://localhost:3001/auth/callback
+http://127.0.0.1:3000/auth/callback
+http://127.0.0.1:3001/auth/callback
+https://link.tone-link.com/reset-password
+http://localhost:3000/reset-password
+http://localhost:3001/reset-password
+```
+
+Google Cloud OAuth Client settings should be:
+
+```txt
+Authorized JavaScript origins:
+https://link.tone-link.com
+http://localhost:3000
+http://localhost:3001
+
+Authorized redirect URIs:
+https://izhffsgceznlfibtuaxo.supabase.co/auth/v1/callback
+```
+
+### Vercel
+
+Vercel hosts the Next.js app. The production smart-link domain is:
+
+```txt
+link.tone-link.com
+```
+
+The root marketing domain can remain separate from the smart-link app.
+
+### Spotify
+
+Spotify integration uses the Client Credentials flow for public catalog lookup. User Spotify accounts are not required.
+
+The Spotify client secret must remain server-side.
+
+### TikTok, Meta, and GA4
+
+Public pages load pixels only when a pixel ID is configured through workspace, artist, or smart-link settings.
+
+Platform clicks fire tracking events before redirecting to the destination platform.
+
+## Database migrations
+
+Migrations are idempotent where practical and should be applied in order. Recent important migrations include:
+
+- campaign pixels and safe header entries
+- multi-tenant auth and workspace membership
+- releases, link pages, page links, and analytics dimensions
+- workspace overview defaults and timezone support
+- artist templates
+- Theme Studio
+- UTM placeholder cleanup
+- workspace subscriptions and entitlements
+
+When a migration updates constraints or RLS policies, Supabase may warn that the query is potentially destructive. Review the SQL, but policy/constraint replacement is expected for entitlement and role changes.
+
+## Security model
+
+- Supabase Auth owns identity.
+- Workspace membership controls dashboard access.
+- Roles control management permissions.
+- Entitlements control product features.
+- RLS protects workspace data.
+- Server route handlers perform privileged writes.
+- Public smart-link pages do not import dashboard-only code.
+- Secrets stay server-side.
+
+## Product direction
+
+ToneLink is moving toward a workspace-based SaaS model:
+
+- Free, Basic, Pro, Enterprise, and Developer plans
+- Stripe-backed workspace subscriptions
+- custom domains
+- richer analytics reports
+- theme marketplace or template library
+- campaign URL builder
+- QR codes
+- presave pages
+- podcast and creator pages
+- artist bio pages
+- team invites and role management
+
+The current architecture is intended to support those features without rewriting the core workspace, entitlement, editor, or analytics model.

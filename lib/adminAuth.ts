@@ -7,7 +7,7 @@ export const ACCESS_COOKIE = "tone_link_access_token";
 export const REFRESH_COOKIE = "tone_link_refresh_token";
 export const WORKSPACE_COOKIE = "tone_link_workspace";
 
-export type WorkspaceRole = "owner" | "admin" | "member" | "viewer";
+export type WorkspaceRole = "owner" | "admin" | "editor" | "member" | "viewer" | "developer";
 export type WorkspaceContext = {
   user: User;
   workspace: { id: string; name: string; owner_id: string };
@@ -59,8 +59,9 @@ export const getWorkspaceContext = cache(async function getWorkspaceContext(requ
 
 export async function isAdmin() {
   const context = await getWorkspaceContext();
-  return Boolean(context && ["owner", "admin", "member"].includes(context.role));
+  return Boolean(context && ["owner", "admin", "editor", "member", "developer"].includes(context.role));
 }
 
-export function canManage(role: WorkspaceRole) { return ["owner", "admin", "member"].includes(role); }
-export function canDelete(role: WorkspaceRole) { return ["owner", "admin"].includes(role); }
+export function canManage(role: WorkspaceRole) { return ["owner", "admin", "editor", "member", "developer"].includes(role); }
+export function canAdmin(role: WorkspaceRole) { return ["owner", "admin", "developer"].includes(role); }
+export function canDelete(role: WorkspaceRole) { return ["owner", "admin", "developer"].includes(role); }

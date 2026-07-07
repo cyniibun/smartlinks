@@ -7,6 +7,12 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next");
+  console.info("[tone-link:auth-callback:debug]", {
+    pathname: url.pathname,
+    queryKeys: [...url.searchParams.keys()],
+    hasCode: Boolean(code),
+    hasError: url.searchParams.has("error") || url.searchParams.has("error_description"),
+  });
   const supabase = getSupabasePublic();
   if (!supabase) return NextResponse.redirect(new URL("/login?error=not-configured", request.url));
   if (!code) return NextResponse.redirect(new URL("/login?error=missing-auth-code", request.url));

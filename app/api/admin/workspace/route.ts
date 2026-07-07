@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getWorkspaceContext } from "@/lib/adminAuth";
+import { canAdmin, getWorkspaceContext } from "@/lib/adminAuth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { DEFAULT_WORKSPACE_TIMEZONE, isValidTimeZone } from "@/lib/timezone";
 
@@ -7,7 +7,7 @@ const slugify=(value:string)=>value.toLowerCase().trim().replace(/[^a-z0-9]+/g,"
 
 export async function PATCH(request:Request) {
   const body=await request.json();const context=await getWorkspaceContext(body.workspaceId);
-  if(!context||!["owner","admin"].includes(context.role))return NextResponse.json({error:"Only workspace owners and admins can update workspace settings."},{status:403});
+  if(!context||!canAdmin(context.role))return NextResponse.json({error:"Only workspace owners, admins, and developers can update workspace settings."},{status:403});
   const name=String(body.name||"").trim();const slug=slugify(String(body.slug||name));const timezone=String(body.timezone||body.defaultTimezone||DEFAULT_WORKSPACE_TIMEZONE).trim();const market=String(body.defaultMarket||"US").trim().toUpperCase();const theme=String(body.defaultTheme||"minimal").trim().toLowerCase();
   if(!name)return NextResponse.json({error:"Workspace name is required."},{status:400});if(!slug)return NextResponse.json({error:"Enter a valid workspace slug."},{status:400});if(!/^[A-Z]{2}$/.test(market))return NextResponse.json({error:"Market must be a two-letter country code."},{status:400});if(!isValidTimeZone(timezone))return NextResponse.json({error:"Choose a valid IANA timezone, such as America/New_York."},{status:400});
   const db=getSupabaseAdmin();if(!db)return NextResponse.json({error:"Supabase unavailable."},{status:500});

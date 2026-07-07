@@ -58,5 +58,11 @@ export async function ensureUserWorkspace(user: User): Promise<WorkspaceBootstra
     throw new Error(`Unable to assign workspace owner: ${membership.error.message}`);
   }
 
+  await admin.from("workspace_subscriptions").insert({
+    workspace_id: created.data.id,
+    plan: "free",
+    status: "active",
+  });
+
   return { workspaceId: created.data.id, createdWorkspace: true };
 }
