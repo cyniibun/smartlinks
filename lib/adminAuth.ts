@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseAdmin, getSupabasePublic } from "@/lib/supabase";
 
@@ -13,7 +14,7 @@ export type WorkspaceContext = {
   role: WorkspaceRole;
 };
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async function getCurrentUser() {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get(ACCESS_COOKIE)?.value;
   const supabase = getSupabasePublic();
@@ -30,9 +31,9 @@ export async function getCurrentUser() {
     cookieStore.set(REFRESH_COOKIE, refreshed.data.session.refresh_token, { ...options, maxAge: 60 * 60 * 24 * 30 });
   } catch { /* Server Components cannot always persist refreshed cookies; route requests will retry. */ }
   return refreshed.data.user;
-}
+});
 
-export async function getWorkspaceContext(requestedWorkspaceId?: string): Promise<WorkspaceContext | null> {
+export const getWorkspaceContext = cache(async function getWorkspaceContext(requestedWorkspaceId?: string): Promise<WorkspaceContext | null> {
   const user = await getCurrentUser();
   const admin = getSupabaseAdmin();
   if (!user || !admin) return null;
@@ -54,7 +55,7 @@ export async function getWorkspaceContext(requestedWorkspaceId?: string): Promis
   const workspace = Array.isArray(data.workspaces) ? data.workspaces[0] : data.workspaces;
   if (!workspace) return null;
   return { user, workspace, role: data.role as WorkspaceRole };
-}
+});
 
 export async function isAdmin() {
   const context = await getWorkspaceContext();
