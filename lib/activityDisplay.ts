@@ -12,14 +12,14 @@ const eventLabels: Record<string, string> = {
 
 const eventBadgeClasses: Record<string, string> = {
   platform_click: "event-platform-click",
-  page_view: "event-page-view",
-  view_content: "event-view-content",
-  visit: "event-visit",
-  share: "event-share",
-  click: "event-click",
-  copy_url: "event-click",
-  embed_click: "event-click",
-  campaign_click: "event-platform-click",
+  page_view: "event-neutral",
+  view_content: "event-neutral",
+  visit: "event-neutral",
+  share: "event-neutral",
+  click: "event-neutral",
+  copy_url: "event-neutral",
+  embed_click: "event-neutral",
+  campaign_click: "event-neutral",
 };
 
 const platformLabels: Record<string, string> = {
