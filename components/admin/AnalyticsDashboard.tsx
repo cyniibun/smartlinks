@@ -23,7 +23,7 @@ function Spinner() {
 }
 
 function KpiSkeleton() {
-  return <div className="stat-grid">{Array.from({ length: 3 }).map((_, i) => <article key={i}><span className="skeleton skeleton-line short" /><strong><Spinner /></strong></article>)}</div>;
+  return <div className="analytics-kpi-grid">{Array.from({ length: 5 }).map((_, i) => <article className="analytics-kpi-card" key={i}><span className="skeleton skeleton-line short" /><strong><Spinner /></strong><span className="skeleton skeleton-line" /></article>)}</div>;
 }
 
 function BreakdownSkeleton() {
@@ -37,6 +37,72 @@ function RecentSkeleton() {
 function Bars({ title, data, emptyLabel = "No data yet" }: { title: string; data: Metric[]; emptyLabel?: string }) {
   const max = Math.max(...data.map((i) => i.count), 1);
   return <section className="admin-panel metric-panel"><h2>{title}</h2>{data.length ? <div className="bar-list">{data.slice(0, 10).map((i) => <div className="bar-item" key={i.name}><div><span>{i.name}</span><strong>{i.count}</strong></div><i style={{ width: `${i.count / max * 100}%` }} /></div>)}</div> : <div className="analytics-empty"><strong>{emptyLabel}</strong><p>Once matching tracking events are recorded, this card will show the top results for the selected filters.</p></div>}</section>;
+}
+
+function formatCount(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
+function normalizeMetricName(name: string) {
+  const value = String(name || "Unknown").trim();
+  const key = value.toLowerCase();
+  if (["mobile", "phone"].includes(key)) return "Mobile";
+  if (["desktop", "computer"].includes(key)) return "Desktop";
+  if (["tablet"].includes(key)) return "Tablet";
+  if (!value || key === "unknown" || key === "undefined" || key === "null") return "Unknown";
+  return displayPlatformName(value, value);
+}
+
+function mergeMetrics(data: Metric[]) {
+  const totals = new Map<string, number>();
+  data.forEach((item) => {
+    const name = normalizeMetricName(item.name);
+    totals.set(name, (totals.get(name) || 0) + item.count);
+  });
+  return [...totals.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+}
+
+function Sparkline({ data }: { data: Point[] }) {
+  const points = data.length ? data : [{ date: "", views: 0, clicks: 0, ctr: 0 }];
+  const max = Math.max(...points.map((point) => point.views), 1);
+  const path = points.map((point, index) => {
+    const x = points.length === 1 ? 0 : index / (points.length - 1) * 100;
+    const y = 42 - point.views / max * 36;
+    return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+  }).join(" ");
+  return <svg className="analytics-sparkline" viewBox="0 0 100 46" preserveAspectRatio="none" aria-hidden="true"><path d={path} /></svg>;
+}
+
+function KpiCard({ label, value, caption, data }: { label: string; value: string; caption: string; data: Point[] }) {
+  return <article className="analytics-kpi-card"><span>{label}</span><strong>{value}</strong><small>{caption}</small><Sparkline data={data} /></article>;
+}
+
+function percent(count: number, total: number) {
+  return total ? Math.round(count / total * 100) : 0;
+}
+
+function DonutCard({ title, data, emptyLabel = "No data yet" }: { title: string; data: Metric[]; emptyLabel?: string }) {
+  const normalized = mergeMetrics(data).slice(0, 5);
+  const total = normalized.reduce((sum, item) => sum + item.count, 0);
+  const colors = ["#ff4f93", "#58d68d", "#ff8ab9", "#77f7ff", "#8f7cff"];
+  let cursor = 0;
+  const gradient = normalized.length ? normalized.map((item, index) => {
+    const start = cursor;
+    const end = cursor + item.count / total * 100;
+    cursor = end;
+    return `${colors[index % colors.length]} ${start}% ${end}%`;
+  }).join(",") : "rgba(255,255,255,.08) 0 100%";
+  return <section className="admin-panel metric-panel analytics-donut-card"><div className="panel-title"><h2>{title}</h2></div>{normalized.length ? <div className="donut-layout"><div className="donut-chart" style={{ background: `conic-gradient(${gradient})` }}><span>{total}</span><small>clicks</small></div><div className="donut-legend">{normalized.map((item, index) => <div key={item.name}><i style={{ background: colors[index % colors.length] }} /><span>{displayPlatformName(item.name, item.name)}</span><strong>{percent(item.count, total)}%</strong><small>{formatCount(item.count)}</small></div>)}</div></div> : <div className="analytics-empty"><strong>{emptyLabel}</strong><p>Distribution appears after matching events are recorded.</p></div>}</section>;
+}
+
+function CountriesCard({ data }: { data?: CountryMetric[] }) {
+  const rows = (data || []).slice(0, 6);
+  const max = Math.max(...rows.map((item) => item.views), 1);
+  return <section className="admin-panel metric-panel countries-card"><div className="panel-title"><h2>Top Countries</h2></div>{rows.length ? <div className="countries-layout"><div className="world-map-visual" aria-hidden="true"><span /><span /><span /><span /><span /></div><div className="bar-list">{rows.map((item) => <div className="bar-item" key={item.country}><div><span>{item.country}</span><strong>{formatCount(item.views)} views</strong></div><i style={{ width: `${item.views / max * 100}%` }} /></div>)}</div></div> : <div className="analytics-empty"><strong>Country data will appear once geo tracking is enabled.</strong><p>New page-view events can include privacy-safe country, region, and city fields when the hosting edge provides them.</p></div>}</section>;
+}
+
+function AnalyticsTabs() {
+  return <nav className="analytics-tabs" aria-label="Analytics sections">{["Overview", "Audience", "Releases", "Campaigns", "Platforms", "Referrers", "Events", "Pixels"].map((tab) => <button key={tab} className={tab === "Overview" ? "active" : ""} type="button">{tab}</button>)}</nav>;
 }
 
 function TimeSeriesChart({ data, workspaceId, loaded }: { data: Point[]; workspaceId?: string; loaded: boolean }) {
@@ -59,7 +125,7 @@ function TimeSeriesChart({ data, workspaceId, loaded }: { data: Point[]; workspa
     const top = above > padding ? above : Math.min(below, Math.max(chartRect.height - tooltipHeight - padding, padding));
     setTip({ point, dateLabel, left, top });
   };
-  return <section className="admin-panel metric-panel full-chart"><div className="panel-title"><div><h2>Views, clicks, and CTR over time</h2><p className="muted">Hover, focus, or tap a day to inspect exact values.</p></div><div className="chart-legend"><span><i className="views" />Views</span><span><i className="clicks" />Clicks</span><span><i className="ctr" />CTR</span></div></div>{loaded && meaningful < 3 && <div className="analytics-helper"><strong>Analytics will become more useful as traffic comes in.</strong><p>For now, use test campaigns or copied links to verify tracking.</p><div><a href={workspaceId ? `/dashboard/${workspaceId}/link-pages` : "/dashboard"}>Open Releases</a><a href={workspaceId ? `/dashboard/${workspaceId}/create` : "/dashboard"}>Create Test Campaign URL</a><a href="#recent-events">View Recent Events</a></div></div>}{data.length ? <div className="time-series-chart" onMouseLeave={() => setTip(null)}>{data.map((point) => { const dateLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${point.date}T12:00:00`)); const label = `${dateLabel}. Views: ${point.views}. Clicks: ${point.clicks}. CTR: ${point.ctr}%.`; return <button type="button" className="time-series-point" key={point.date} aria-label={label} onMouseEnter={(event) => activate(event, point, dateLabel)} onFocus={(event) => activate(event, point, dateLabel)} onBlur={() => setTip(null)} onClick={(event) => { activate(event, point, dateLabel); const button = event.currentTarget; button.classList.add("tap-active"); window.setTimeout(() => button.classList.remove("tap-active"), 1800); window.setTimeout(() => setTip(null), 2200); }}><span>{point.date.slice(5)}</span><div><i className="views" style={{ height: `${Math.max(point.views / max * 100, 3)}%` }} /><i className="clicks" style={{ height: `${Math.max(point.clicks / max * 100, 3)}%` }} /></div><small>{point.ctr}% CTR</small></button>; })}{tip && <div className="chart-tooltip" role="tooltip" style={{ left: tip.left, top: tip.top }}><strong>{tip.dateLabel}</strong><span>Views: {tip.point.views}</span><span>Clicks: {tip.point.clicks}</span><span>CTR: {tip.point.ctr}%</span></div>}</div> : <div className="analytics-empty"><strong>No time-series data yet</strong><p>Tracking events for this date range will appear here after page views or platform clicks are recorded.</p></div>}</section>;
+  return <section className="admin-panel metric-panel full-chart link-views-card"><div className="panel-title"><div><h2>Link Views</h2><p className="muted">Views, clicks, and CTR over time.</p></div><div className="chart-legend"><span><i className="views" />Views</span><span><i className="clicks" />Clicks</span><span><i className="ctr" />CTR</span></div></div>{loaded && meaningful < 3 && <div className="analytics-helper"><strong>Analytics will become more useful as traffic comes in.</strong><p>For now, use test campaigns or copied links to verify tracking.</p><div><a href={workspaceId ? `/dashboard/${workspaceId}/link-pages` : "/dashboard"}>Open Releases</a><a href={workspaceId ? `/dashboard/${workspaceId}/create` : "/dashboard"}>Create a Release</a><a href="#recent-events">View Recent Events</a></div></div>}{data.length ? <div className="time-series-chart" onMouseLeave={() => setTip(null)}>{data.map((point) => { const dateLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${point.date}T12:00:00`)); const label = `${dateLabel}. Views: ${point.views}. Clicks: ${point.clicks}. CTR: ${point.ctr}%.`; return <button type="button" className="time-series-point" key={point.date} aria-label={label} onMouseEnter={(event) => activate(event, point, dateLabel)} onFocus={(event) => activate(event, point, dateLabel)} onBlur={() => setTip(null)} onClick={(event) => { activate(event, point, dateLabel); const button = event.currentTarget; button.classList.add("tap-active"); window.setTimeout(() => button.classList.remove("tap-active"), 1800); window.setTimeout(() => setTip(null), 2200); }}><span>{point.date.slice(5)}</span><div><i className="views" style={{ height: `${Math.max(point.views / max * 100, 3)}%` }} /><i className="clicks" style={{ height: `${Math.max(point.clicks / max * 100, 3)}%` }} /></div><small>{point.ctr}% CTR</small></button>; })}{tip && <div className="chart-tooltip" role="tooltip" style={{ left: tip.left, top: tip.top }}><strong>{tip.dateLabel}</strong><span>Views: {tip.point.views}</span><span>Clicks: {tip.point.clicks}</span><span>CTR: {tip.point.ctr}%</span></div>}</div> : <div className="analytics-empty"><strong>No time-series data yet</strong><p>Tracking events for this date range will appear here after page views or platform clicks are recorded.</p></div>}</section>;
 }
 
 export function AnalyticsDashboard({ workspaceId, artistId = "", releaseId = "", linkPageId = "", artists = [], linkPages = [] }: { workspaceId?: string; artistId?: string; releaseId?: string; linkPageId?: string; artists?: Option[]; linkPages?: Option[] }) {
@@ -81,10 +147,14 @@ export function AnalyticsDashboard({ workspaceId, artistId = "", releaseId = "",
   const exportHref = `/api/admin/analytics?${new URLSearchParams([...queryBase.entries(), ["export", "csv"]])}`;
   const updateFilter = (patch: Partial<typeof filters>) => setFilters((current) => ({ ...current, ...patch, recentPage: patch.recentPage || "1" }));
   const loaded = loadState === "loaded_with_data" || loadState === "loaded_empty";
-  return <main className="admin-main analytics-page"><div className="admin-title-row"><div><span className="admin-kicker">PERFORMANCE</span><h1>Analytics</h1><p>Deep insights into releases, campaigns, traffic sources, and listener behavior.</p></div><div className="editor-actions">{data.canExport ? <a className="admin-secondary" href={exportHref}>Export event log CSV</a> : <button className="admin-secondary" disabled title="CSV event-log export is available on upgraded plans.">Export event log CSV</button>}</div></div>{error && <AsyncError message={error} detail={detail} onRetry={load} />}
+  const ctr = data.summary.visits ? Math.round(data.summary.clicks / data.summary.visits * 100) : null;
+  const uniqueListeners = "—";
+  const conversionRate = ctr === null ? "—" : `${ctr}%`;
+  const normalizedDevices = mergeMetrics(data.devices);
+  return <main className="admin-main analytics-page analytics-v2"><div className="admin-title-row analytics-v2-header"><div><h1>Analytics</h1><p>Deep insights into your audience, clicks, and campaigns.</p></div><div className="editor-actions"><select className="analytics-header-range" value={filters.range} onChange={(e) => updateFilter({ range: e.target.value })}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7">Last 7 days</option><option value="28">Last 28 days</option><option value="90">Last 90 days</option><option value="all">All time</option><option value="custom">Custom</option></select><button className="admin-secondary" type="button" disabled>Share</button>{data.canExport ? <a className="admin-primary" href={exportHref}>Export</a> : <button className="admin-primary" disabled title="CSV event-log export is available on upgraded plans.">Export</button>}</div></div><AnalyticsTabs />{error && <AsyncError message={error} detail={detail} onRetry={load} />}
     <section className="admin-panel analytics-filters"><select value={filters.range} onChange={(e) => updateFilter({ range: e.target.value })}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7">Last 7 days</option><option value="28">Last 28 days</option><option value="90">Last 90 days</option><option value="all">All time</option><option value="custom">Custom</option></select>{filters.range === "custom" && <><input type="date" value={filters.from} onChange={(e) => updateFilter({ from: e.target.value })} /><input type="date" value={filters.to} onChange={(e) => updateFilter({ to: e.target.value })} /></>}<select value={filters.artistId} onChange={(e) => updateFilter({ artistId: e.target.value })}><option value="">All artists</option>{artists.map((artist) => <option key={artist.id} value={artist.id}>{artist.name}</option>)}</select><select value={filters.linkPageId} onChange={(e) => updateFilter({ linkPageId: e.target.value })}><option value="">All releases</option>{linkPages.map((page) => <option key={page.id} value={page.id}>{page.title || page.slug}</option>)}</select><input placeholder="Platform" value={filters.platform} onChange={(e) => updateFilter({ platform: e.target.value })} /><select value={filters.eventType} onChange={(e) => updateFilter({ eventType: e.target.value })}><option value="">All events</option>{eventTypes.map((v) => <option key={v} value={v}>{displayEventType(v)}</option>)}</select><input placeholder="UTM source" value={filters.utmSource} onChange={(e) => updateFilter({ utmSource: e.target.value })} /><input placeholder="UTM campaign" value={filters.utmCampaign} onChange={(e) => updateFilter({ utmCampaign: e.target.value })} /></section>
     {data.retentionLimited && <div className="admin-alert">This workspace is on the {data.planId || "free"} plan. {data.retentionDays ? `Analytics are limited to ${data.retentionDays} days.` : "Custom/all-time reporting is locked."} Upgrade to unlock the selected range.</div>}
-    {summaryLoading ? <KpiSkeleton /> : <div className="stat-grid"><article><span>Total views</span><strong>{data.summary.visits}</strong></article><article><span>Outbound clicks</span><strong>{data.summary.clicks}</strong></article><article><span>Click-through rate</span><strong>{data.summary.visits ? `${Math.round(data.summary.clicks / data.summary.visits * 100)}%` : "—"}</strong></article></div>}
-    {breakdownLoading ? <><BreakdownSkeleton /><RecentSkeleton /></> : <><div className="analytics-grid"><TimeSeriesChart data={data.timeSeries} workspaceId={workspaceId} loaded={loaded} /><Bars title="Platform breakdown" data={data.byPlatform} /><Bars title="Top Releases" data={data.bySong} /><Bars title="Top Countries" data={(data.countryBreakdown || []).map((item) => ({ name: item.country, count: item.views }))} emptyLabel="No country data yet" /><Bars title="Referrers" data={data.referrers} emptyLabel="No referrers yet" /><Bars title="UTM Sources" data={data.utmSources} emptyLabel="No UTM sources yet" /><Bars title="UTM Campaigns" data={data.campaigns} emptyLabel="No UTM campaigns yet" /><Bars title="Devices" data={data.devices} /><Bars title="Browsers" data={data.browsers} /></div><section className="admin-panel" id="recent-events"><div className="panel-title"><div><h2>Recent events</h2><p className="muted">Showing 50 events per page.</p></div><div className="pagination-row compact"><button disabled={filters.recentPage === "1"} onClick={() => updateFilter({ recentPage: String(Math.max(Number(filters.recentPage) - 1, 1)) })}>Previous</button><span>Page {filters.recentPage}</span><button disabled={!data.recentHasMore} onClick={() => updateFilter({ recentPage: String(Number(filters.recentPage) + 1) })}>Next</button></div></div>{data.recent.length ? <div className="recent-table analytics-recent">{data.recent.map((e) => <div key={e.id}><time>{formatWorkspaceDate(e.created_at, data.timezone, true)}</time><span className={eventBadgeClass(e.event_type)}>{displayEventType(e.event_type)}</span><strong>{e.link_pages?.title || e.releases?.title || e.songs?.title || "Unknown"}</strong><span>{displayPlatformName(e.platform)}</span><span>{e.referrer || "Direct"}</span><span>{displayUtmSource(e.utm_source)}</span><span>{displayUtmCampaign(e.utm_campaign)}</span><span>{displayUtmMedium(e.utm_medium)}</span><span>{e.device_type || "Unknown"}</span></div>)}</div> : <div className="analytics-empty"><strong>No recent events yet</strong><p>Open a release, copy its URL, or click a platform button to verify tracking.</p></div>}</section></>}
+    {summaryLoading ? <KpiSkeleton /> : <div className="analytics-kpi-grid"><KpiCard label="Link Views" value={formatCount(data.summary.visits)} caption="Selected range" data={data.timeSeries} /><KpiCard label="Total Clicks" value={formatCount(data.summary.clicks)} caption="Outbound platform clicks" data={data.timeSeries.map((point) => ({ ...point, views: point.clicks }))} /><KpiCard label="CTR" value={ctr === null ? "—" : `${ctr}%`} caption="Clicks divided by views" data={data.timeSeries.map((point) => ({ ...point, views: point.ctr }))} /><KpiCard label="Unique Listeners" value={uniqueListeners} caption="Coming with visitor identity" data={[]} /><KpiCard label="Conversion Rate" value={conversionRate} caption="Current CTR proxy" data={data.timeSeries.map((point) => ({ ...point, views: point.ctr }))} /></div>}
+    {breakdownLoading ? <><BreakdownSkeleton /><RecentSkeleton /></> : <><div className="analytics-grid analytics-v2-grid"><TimeSeriesChart data={data.timeSeries} workspaceId={workspaceId} loaded={loaded} /><DonutCard title="Top Platforms" data={data.byPlatform} emptyLabel="No platform clicks yet" /><CountriesCard data={data.countryBreakdown} /><Bars title="Top Referrers" data={data.referrers.map((item) => ({ ...item, name: item.name || "Direct" }))} emptyLabel="No referrers yet" /><DonutCard title="Device Breakdown" data={normalizedDevices} emptyLabel="No device data yet" /><Bars title="Top Releases" data={data.bySong} /><Bars title="UTM Sources" data={data.utmSources} emptyLabel="No UTM sources yet" /><Bars title="UTM Campaigns" data={data.campaigns} emptyLabel="No UTM campaigns yet" /><Bars title="Browsers" data={data.browsers} /></div><section className="admin-panel analytics-events-card" id="recent-events"><div className="panel-title"><div><h2>Recent activity</h2><p className="muted">Showing 50 events per page.</p></div><div className="pagination-row compact"><button disabled={filters.recentPage === "1"} onClick={() => updateFilter({ recentPage: String(Math.max(Number(filters.recentPage) - 1, 1)) })}>Previous</button><span>Page {filters.recentPage}</span><button disabled={!data.recentHasMore} onClick={() => updateFilter({ recentPage: String(Number(filters.recentPage) + 1) })}>Next</button></div></div>{data.recent.length ? <div className="recent-table analytics-recent">{data.recent.map((e) => <div key={e.id}><time>{formatWorkspaceDate(e.created_at, data.timezone, true)}</time><span className={eventBadgeClass(e.event_type)}>{displayEventType(e.event_type)}</span><strong>{e.link_pages?.title || e.releases?.title || e.songs?.title || "Unknown"}</strong><span>{displayPlatformName(e.platform)}</span><span>{e.referrer || "Direct"}</span><span>{displayUtmSource(e.utm_source)}</span><span>{displayUtmCampaign(e.utm_campaign)}</span><span>{displayUtmMedium(e.utm_medium)}</span><span>{e.device_type || "Unknown"}</span></div>)}</div> : <div className="analytics-empty"><strong>No recent events yet</strong><p>Open a release, copy its URL, or click a platform button to verify tracking.</p></div>}</section></>}
   </main>;
 }
