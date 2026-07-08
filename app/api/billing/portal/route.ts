@@ -28,6 +28,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error("[tone-link:billing:portal]", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Billing portal failed." }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Billing portal failed.";
+    const readable = /No such customer|resource_missing/i.test(message)
+      ? "Stripe could not find this workspace customer in the current Stripe environment. Check whether your Vercel Stripe secret key is using the same test/live mode as the saved customer."
+      : message;
+    return NextResponse.json({ error: readable, detail: message }, { status: 500 });
   }
 }

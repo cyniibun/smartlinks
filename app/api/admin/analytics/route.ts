@@ -1,22 +1,22 @@
 import { NextResponse } from "next/server";
 import { getWorkspaceContext } from "@/lib/adminAuth";
+import { ANALYTICS_STANDARD_EVENT_TYPES, applyAnalyticsEventFilters, getAnalyticsSummaryCounts, isAnalyticsClickEvent, isAnalyticsViewEvent, type AnalyticsEventFilters } from "@/lib/analyticsAggregation";
 import { getCampaignTimeseries, getReferrerBreakdown, getReferrerDomain, getReferrerTimeseries, getUtmCampaignBreakdown, getUtmSourceBreakdown, groupAnalyticsEvents, type AnalyticsEventRow } from "@/lib/analyticsBreakdowns";
 import { getWorkspaceEntitlements } from "@/lib/entitlements";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { DEFAULT_WORKSPACE_TIMEZONE, getWorkspaceDateRange } from "@/lib/timezone";
 import { normalizeUtmValue } from "@/lib/utm";
 
-const VIEW_EVENTS = ["page_view", "view_content", "visit"];
-const STANDARD_EVENT_TYPES = ["page_view", "view_content", "platform_click", "copy_url", "share", "embed_click", "campaign_click"];
 const csvEscape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 const dayKey = (value: string, timezone: string) => new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+const analyticsJson = (body: unknown, init?: ResponseInit) => NextResponse.json(body, { ...init, headers: { "cache-control": "no-store", ...(init?.headers || {}) } });
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const context = await getWorkspaceContext(params.get("workspaceId") || undefined);
-  if (!context) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!context) return analyticsJson({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabaseAdmin();
-  if (!supabase) return NextResponse.json({ summary: { visits: 0, clicks: 0 }, byPlatform: [], bySong: [], referrers: [], utmSources: [], campaigns: [], devices: [], recent: [], configured: false });
+  if (!supabase) return analyticsJson({ summary: { visits: 0, clicks: 0 }, byPlatform: [], bySong: [], referrers: [], utmSources: [], campaigns: [], devices: [], recent: [], configured: false });
 
   const workspacePlan = await supabase.from("workspaces").select("timezone, default_timezone").eq("id", context.workspace.id).single();
   const entitlements = await getWorkspaceEntitlements(context.workspace.id, context.user, context.role);
@@ -36,20 +36,37 @@ export async function GET(request: Request) {
   const rowLimit = exportCsv ? 5000 : Math.min(Number(params.get("limit") || "1000") || 1000, 1000);
   const recentLimit = Math.min(Number(params.get("recentLimit") || "50") || 50, 100);
   const recentPage = Math.max(Number(params.get("recentPage") || "1") || 1, 1);
+  const filters: AnalyticsEventFilters = {
+    workspaceId: context.workspace.id,
+    from: effectiveFrom,
+    to: requestedTo,
+    eventType: params.get("eventType"),
+    platform: params.get("platform"),
+    utmSource: params.get("utmSource"),
+    utmCampaign: params.get("utmCampaign"),
+    artistId: params.get("artistId"),
+    releaseId: params.get("releaseId"),
+    linkPageId: params.get("linkPageId"),
+  };
+  const baseMeta = { timezone, planId, retentionDays, canExport: entitlements.features.analytics_export, lockedRange, eventTypes: ANALYTICS_STANDARD_EVENT_TYPES, retentionLimited: Boolean(lockedRange || (retentionFloor && requestedFrom && requestedFrom < retentionFloor)) };
 
-  let query = (supabase.from("click_events") as any).select(summaryOnly ? "id,event_type" : "*, songs(title, slug), releases(title), link_pages(title,slug), artists(name)").eq("workspace_id", context.workspace.id).order("created_at", { ascending: false }).limit(rowLimit);
-  if (effectiveFrom) query = query.gte("created_at", effectiveFrom);
-  if (requestedTo) query = query.lte("created_at", requestedTo);
-  if (params.get("eventType")) query = query.eq("event_type", params.get("eventType")!);
-  if (params.get("platform")) query = query.eq("platform", params.get("platform")!);
-  if (params.get("utmSource")) query = query.ilike("utm_source", `%${params.get("utmSource")}%`);
-  if (params.get("utmCampaign")) query = query.ilike("utm_campaign", `%${params.get("utmCampaign")}%`);
-  if (params.get("artistId")) query = query.eq("artist_id", params.get("artistId")!);
-  if (params.get("releaseId")) query = query.eq("release_id", params.get("releaseId")!);
-  if (params.get("linkPageId")) query = query.eq("link_page_id", params.get("linkPageId")!);
+  let summary;
+  try {
+    summary = await getAnalyticsSummaryCounts(supabase, filters);
+  } catch (error) {
+    return analyticsJson({ error: error instanceof Error ? error.message : "Analytics summary failed." }, { status: 500 });
+  }
+
+  if (summaryOnly) return analyticsJson({ ...baseMeta, summary: { visits: summary.visits, clicks: summary.clicks }, byPlatform: [], bySong: [], referrers: [], utmSources: [], campaigns: [], devices: [], browsers: [], timeSeries: [], recent: [], recentPage, recentLimit, configured: true, summaryOnly: true });
+
+  let query = (supabase.from("click_events") as any)
+    .select("*, songs(title, slug), releases(title), link_pages(title,slug), artists(name)")
+    .order("created_at", { ascending: false })
+    .limit(rowLimit);
+  query = applyAnalyticsEventFilters(query, filters);
 
   const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return analyticsJson({ error: error.message }, { status: 500 });
 
   const rawEvents = (data || []) as AnalyticsEventRow[];
   const events: AnalyticsEventRow[] = rawEvents.map((event) => ({
@@ -60,24 +77,20 @@ export async function GET(request: Request) {
     utm_content: normalizeUtmValue(event.utm_content),
     utm_term: normalizeUtmValue(event.utm_term),
   }));
-  const clicks = events.filter((event) => event.event_type === "platform_click");
-  const visits = events.filter((event) => VIEW_EVENTS.includes(event.event_type));
-  const baseMeta = { timezone, planId, retentionDays, canExport: entitlements.features.analytics_export, lockedRange, eventTypes: STANDARD_EVENT_TYPES, retentionLimited: Boolean(lockedRange || (retentionFloor && requestedFrom && requestedFrom < retentionFloor)) };
+  const clicks = events.filter((event) => isAnalyticsClickEvent(event.event_type));
 
   if (exportCsv) {
-    if (!entitlements.features.analytics_export) return NextResponse.json({ error: "CSV event-log export is available on upgraded plans." }, { status: 403 });
+    if (!entitlements.features.analytics_export) return analyticsJson({ error: "CSV event-log export is available on upgraded plans." }, { status: 403 });
     const rows = [["timestamp", "event_type", "smart_link", "platform", "referrer", "utm_source", "utm_campaign", "device"].map(csvEscape).join(",")].concat(events.map((event) => [event.created_at, event.event_type, event.link_pages?.title || event.releases?.title || event.songs?.title || "", event.platform || "", getReferrerDomain(event.referrer), event.utm_source || "", event.utm_campaign || "", event.device_type || ""].map(csvEscape).join(",")));
     return new NextResponse(rows.join("\n"), { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename=\"tonelink-analytics-${Date.now()}.csv\"` } });
   }
-
-  if (summaryOnly) return NextResponse.json({ ...baseMeta, summary: { visits: visits.length, clicks: clicks.length }, byPlatform: [], bySong: [], referrers: [], utmSources: [], campaigns: [], devices: [], browsers: [], timeSeries: [], recent: [], recentPage, recentLimit, configured: true, summaryOnly: true });
 
   const timeSeriesMap = new Map<string, { date: string; views: number; clicks: number; ctr: number }>();
   for (const event of events) {
     const key = dayKey(event.created_at, timezone);
     const row = timeSeriesMap.get(key) || { date: key, views: 0, clicks: 0, ctr: 0 };
-    if (VIEW_EVENTS.includes(event.event_type)) row.views++;
-    if (event.event_type === "platform_click") row.clicks++;
+    if (isAnalyticsViewEvent(event.event_type)) row.views++;
+    if (isAnalyticsClickEvent(event.event_type)) row.clicks++;
     row.ctr = row.views ? Math.round(row.clicks / row.views * 100) : 0;
     timeSeriesMap.set(key, row);
   }
@@ -85,9 +98,9 @@ export async function GET(request: Request) {
   const recentStart = (recentPage - 1) * recentLimit;
   const recent = events.slice(recentStart, recentStart + recentLimit).map((event) => ({ ...event, referrer: getReferrerDomain(event.referrer) }));
 
-  return NextResponse.json({
+  return analyticsJson({
     ...baseMeta,
-    summary: { visits: visits.length, clicks: clicks.length },
+    summary: { visits: summary.visits, clicks: summary.clicks },
     byPlatform: groupAnalyticsEvents(clicks, (event) => event.platform || "Unknown").slice(0, 10),
     bySong: groupAnalyticsEvents(clicks, (event) => event.link_pages?.title || event.releases?.title || event.songs?.title || "Unknown").slice(0, 10),
     referrers: getReferrerBreakdown(events),
