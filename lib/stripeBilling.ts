@@ -3,6 +3,8 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import type { PlanId } from "@/lib/entitlements";
 
 export type PaidPlanId = "basic" | "pro";
+export type BillingInterval = "monthly" | "annual";
+export type StripePriceMapping = { plan: PlanId; interval: BillingInterval };
 
 let stripeClient: Stripe | null = null;
 
@@ -13,19 +15,33 @@ export function getStripe() {
   return stripeClient;
 }
 
-export function priceIdForPlan(plan: string) {
-  const prices: Record<PaidPlanId, string | undefined> = {
-    basic: process.env.STRIPE_BASIC_PRICE_ID,
-    pro: process.env.STRIPE_PRO_PRICE_ID,
-  };
-  return prices[plan as PaidPlanId] || null;
+export function normalizeBillingInterval(value: unknown): BillingInterval {
+  return value === "annual" ? "annual" : "monthly";
 }
 
-export function planForPriceId(priceId?: string | null): PlanId {
-  if (!priceId) return "free";
-  if (priceId === process.env.STRIPE_BASIC_PRICE_ID) return "basic";
-  if (priceId === process.env.STRIPE_PRO_PRICE_ID) return "pro";
-  return "free";
+export function priceIdForPlan(plan: string, interval: BillingInterval = "monthly") {
+  const explicitPrices: Record<PaidPlanId, Record<BillingInterval, string | undefined>> = {
+    basic: {
+      monthly: process.env.STRIPE_BASIC_MONTHLY_PRICE_ID || process.env.STRIPE_BASIC_PRICE_ID,
+      annual: process.env.STRIPE_BASIC_ANNUAL_PRICE_ID,
+    },
+    pro: {
+      monthly: process.env.STRIPE_PRO_MONTHLY_PRICE_ID || process.env.STRIPE_PRO_PRICE_ID,
+      annual: process.env.STRIPE_PRO_ANNUAL_PRICE_ID,
+    },
+  };
+  return explicitPrices[plan as PaidPlanId]?.[interval] || null;
+}
+
+export function subscriptionMappingForPriceId(priceId?: string | null): StripePriceMapping {
+  if (!priceId) return { plan: "free", interval: "monthly" };
+  const mappings: Array<[string | undefined, StripePriceMapping]> = [
+    [process.env.STRIPE_BASIC_MONTHLY_PRICE_ID || process.env.STRIPE_BASIC_PRICE_ID, { plan: "basic", interval: "monthly" }],
+    [process.env.STRIPE_BASIC_ANNUAL_PRICE_ID, { plan: "basic", interval: "annual" }],
+    [process.env.STRIPE_PRO_MONTHLY_PRICE_ID || process.env.STRIPE_PRO_PRICE_ID, { plan: "pro", interval: "monthly" }],
+    [process.env.STRIPE_PRO_ANNUAL_PRICE_ID, { plan: "pro", interval: "annual" }],
+  ];
+  return mappings.find(([candidate]) => Boolean(candidate) && candidate === priceId)?.[1] || { plan: "free", interval: "monthly" };
 }
 
 export function isPaidSubscriptionStatus(status?: string | null) {
@@ -61,16 +77,20 @@ export async function syncStripeSubscription(subscription: Stripe.Subscription, 
   if (!db) throw new Error("Supabase is not configured.");
   const item = subscription.items.data[0];
   const priceId = item?.price?.id;
-  const plan = planForPriceId(priceId);
+  const mapping = subscriptionMappingForPriceId(priceId);
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
   const workspaceId = workspaceIdHint || subscription.metadata?.workspaceId || null;
+  const periodStart = (subscription as unknown as { current_period_start?: number }).current_period_start;
   const periodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
 
   const patch = {
-    plan: isPaidSubscriptionStatus(subscription.status) ? plan : "free",
+    plan: isPaidSubscriptionStatus(subscription.status) ? mapping.plan : "free",
     status: subscription.status,
     stripe_customer_id: customerId,
     stripe_subscription_id: subscription.id,
+    stripe_price_id: priceId || null,
+    billing_interval: mapping.interval,
+    current_period_starts_at: periodStart ? new Date(periodStart * 1000).toISOString() : null,
     current_period_ends_at: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
     cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
     trial_ends_at: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,

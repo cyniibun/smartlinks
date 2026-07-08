@@ -88,10 +88,12 @@ export async function getWorkspaceEntitlements(workspaceId: string, user?: Pick<
   const developer = actualRole === "developer" || envDeveloper;
   if (developer) return entitlementsForPlan("developer", "active", false, true);
 
-  const subscription = await db.from("workspace_subscriptions").select("plan,status").eq("workspace_id", workspaceId).maybeSingle();
+  const subscription = await db.from("workspace_subscriptions").select("plan,status,current_period_ends_at").eq("workspace_id", workspaceId).maybeSingle();
   if (!subscription.error && subscription.data) {
     const status = String(subscription.data.status || "active");
-    return entitlementsForPlan(isPaidSubscriptionStatus(status) ? normalizePlan(subscription.data.plan) : "free", status, true, false);
+    const periodEnd = subscription.data.current_period_ends_at ? new Date(subscription.data.current_period_ends_at).getTime() : null;
+    const periodValid = periodEnd === null || periodEnd > Date.now();
+    return entitlementsForPlan(isPaidSubscriptionStatus(status) && periodValid ? normalizePlan(subscription.data.plan) : "free", status, true, false);
   }
 
   const workspace = await db.from("workspaces").select("plan_id").eq("id", workspaceId).maybeSingle();
