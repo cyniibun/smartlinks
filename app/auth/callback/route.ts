@@ -6,28 +6,35 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const next = request.nextUrl.searchParams.get("next");
+  const providerError = request.nextUrl.searchParams.get("error") || request.nextUrl.searchParams.get("error_description");
   console.info("[tone-link:auth-callback:debug]", {
     pathname: request.nextUrl.pathname,
     queryKeys: [...request.nextUrl.searchParams.keys()],
     hasCode: Boolean(code),
-    hasError: request.nextUrl.searchParams.has("error") || request.nextUrl.searchParams.has("error_description"),
+    hasError: Boolean(providerError),
   });
+  if (providerError) {
+    console.warn("[tone-link:auth-callback:provider-error]", { hasProviderError: true });
+    return NextResponse.redirect(new URL("/login?error=oauth-provider-error", request.url));
+  }
   if (!code) return NextResponse.redirect(new URL("/login?error=missing-auth-code", request.url));
   const supabase = await createClient();
   if (!supabase) return NextResponse.redirect(new URL("/login?error=not-configured", request.url));
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error || !data.session?.user) {
-    console.warn("[tone-link:auth-callback]", error?.message);
-    return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error?.message || "auth-callback-failed")}`, request.url));
+    console.warn("[tone-link:auth-callback:exchange-failed]", { message: error?.message || "missing session" });
+    return NextResponse.redirect(new URL("/login?error=oauth-exchange-failed", request.url));
   }
+  console.info("[tone-link:auth-callback:exchange-success]", { hasUser: Boolean(data.session.user?.id) });
   const user = data.session.user;
   if (!user.email) return NextResponse.redirect(new URL("/login?error=missing-email", request.url));
   if (!user.email_confirmed_at) return NextResponse.redirect(new URL(`/check-email?email=${encodeURIComponent(user.email)}`, request.url));
   let workspaceId = "";
   try {
     workspaceId = (await ensureUserWorkspace(user)).workspaceId;
+    console.info("[tone-link:auth-callback:workspace-success]", { hasWorkspace: Boolean(workspaceId) });
   } catch (reason) {
-    console.warn("[tone-link:callback-bootstrap]", reason);
+    console.warn("[tone-link:auth-callback:workspace-failed]", reason instanceof Error ? reason.message : "workspace bootstrap failed");
     return NextResponse.redirect(new URL("/login?error=workspace-bootstrap-failed", request.url));
   }
   const destination = next && next.startsWith("/dashboard") ? next : `/dashboard/${workspaceId}/overview`;

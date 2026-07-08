@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { Analytics } from "@vercel/analytics/next";
 import { PixelScripts } from "@/components/PixelScripts";
 import { getSongBySlug } from "@/lib/songRepository";
 import "./globals.css";
@@ -16,5 +17,6 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return <html lang="en"><body>
     {song && <PixelScripts tiktokPixelId={song.trackingPixels?.tiktokPixelId} metaPixelId={song.trackingPixels?.metaPixelId} gaMeasurementId={song.trackingPixels?.gaMeasurementId} />}
     {children}
+    <Analytics />
   </body></html>;
 }

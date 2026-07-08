@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 function GoogleIcon() {
@@ -12,29 +12,49 @@ export function AuthForm({ mode, error, message }: { mode: "login" | "signup"; e
   const signup = mode === "signup";
   const [oauthLoading, setOauthLoading] = useState(false);
   const [clientError, setClientError] = useState("");
+  const oauthStarted = useRef(false);
   const friendlyError = clientError || (error === "invalid-credentials" ? "Email or password is incorrect."
     : error === "not-configured" ? "Supabase Auth is not configured."
     : error === "passwords-do-not-match" ? "Passwords do not match."
     : error === "too-many-attempts" ? "Too many attempts. Try again shortly."
     : error === "workspace-bootstrap-failed" ? "Account was verified, but workspace setup failed. Try again or contact support."
+    : error === "missing-auth-code" ? "Google returned an incomplete sign-in response. Please try again."
+    : error === "oauth-exchange-failed" ? "Google sign-in could not be completed. Please try again."
+    : error === "oauth-provider-error" ? "Google sign-in was canceled or rejected."
+    : error === "oauth-flow-mismatch" ? "Google returned an outdated sign-in response. Please try again."
     : error);
+  useEffect(() => {
+    if (!window.location.hash) return;
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const hasTokenHash = hash.has("access_token") || hash.has("refresh_token");
+    const hasErrorHash = hash.has("error") || hash.has("error_description");
+    if (!hasTokenHash && !hasErrorHash) return;
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    setClientError(hasTokenHash ? "Google returned an outdated sign-in response. Please try again." : hash.get("error_description") || "Google sign-in could not be completed.");
+  }, []);
   const startGoogle = async () => {
+    if (oauthStarted.current) return;
+    oauthStarted.current = true;
     setOauthLoading(true);
     setClientError("");
     const supabase = createClient();
     if (!supabase) {
+      oauthStarted.current = false;
       setOauthLoading(false);
       setClientError("Supabase Auth is not configured.");
       return;
     }
+    console.info("[tone-link:auth]", "starting-google-oauth");
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/callback`,
+        redirectTo: `${siteUrl}/auth/callback`,
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
     if (oauthError) {
+      oauthStarted.current = false;
       setOauthLoading(false);
       setClientError(oauthError.message);
     }
