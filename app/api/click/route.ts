@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
+import { getGeoFromHeaders } from "@/lib/analytics/geo";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { normalizeUtmValue } from "@/lib/utm";
 
@@ -10,6 +11,7 @@ export async function POST(request: Request) {
     if (supabase) {
       const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0] || "";
       const ipHash = forwarded ? createHash("sha256").update(`${forwarded}:${process.env.EVENT_HASH_SALT || process.env.SUPABASE_SECRET_KEY || "tone-link"}`).digest("hex") : null;
+      const geo = getGeoFromHeaders(request.headers);
       const page = event.songSlug ? await supabase.from("link_pages").select("id, workspace_id, artist_id, release_id").eq("slug", event.songSlug).eq("published", true).maybeSingle() : null;
       const song = !page?.data && event.songSlug ? await supabase.from("songs").select("id, workspace_id").eq("slug", event.songSlug).eq("published", true).maybeSingle() : null;
       const utmSource = normalizeUtmValue(event.utmSource);
@@ -26,6 +28,7 @@ export async function POST(request: Request) {
         referrer: event.referrer || null, user_agent: event.userAgent || request.headers.get("user-agent"),
         ip_hash: ipHash, utm_source: utmSource, utm_medium: utmMedium,
         utm_campaign: utmCampaign, utm_content: utmContent, utm_term: utmTerm,
+        country: geo.country, region: geo.region, city: geo.city, timezone: geo.timezone,
         device_type: /mobile|android|iphone/i.test(event.userAgent || request.headers.get("user-agent") || "") ? "mobile" : "desktop"
       });
       if (error) throw error;

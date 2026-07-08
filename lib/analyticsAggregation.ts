@@ -24,8 +24,18 @@ export type AnalyticsEventFilters = {
   linkPageId?: string | null;
 };
 
+export type CountryBreakdownRow = { country: string; views: number };
+export type RegionBreakdownRow = { country: string; region: string; views: number };
+export type CityBreakdownRow = { country: string; region: string | null; city: string; views: number };
+export type AnalyticsGeoBreakdowns = {
+  countryBreakdown: CountryBreakdownRow[];
+  regionBreakdown: RegionBreakdownRow[];
+  cityBreakdown: CityBreakdownRow[];
+};
+
 type SupabaseLike = {
   from: (table: string) => any;
+  rpc: (fn: string, args: Record<string, unknown>) => any;
 };
 
 export function isAnalyticsViewEvent(eventType?: string | null) {
@@ -75,5 +85,49 @@ export async function getAnalyticsSummaryCounts(db: SupabaseLike, filters: Analy
     views,
     clicks,
     ctr: views ? Math.round((clicks / views) * 100) : 0,
+  };
+}
+
+async function getGeoBreakdown(db: SupabaseLike, filters: AnalyticsEventFilters, kind: "country" | "region" | "city") {
+  if (filters.eventType && !isAnalyticsViewEvent(filters.eventType)) return [];
+
+  const { data, error } = await db.rpc("get_click_event_geo_breakdown", {
+    p_workspace_id: filters.workspaceId,
+    p_kind: kind,
+    p_from: filters.from || null,
+    p_to: filters.to || null,
+    p_link_page_id: filters.linkPageId || null,
+    p_release_id: filters.releaseId || null,
+    p_artist_id: filters.artistId || null,
+    p_utm_source: filters.utmSource || null,
+    p_utm_campaign: filters.utmCampaign || null,
+    p_limit: 10,
+  });
+
+  if (error) {
+    console.warn("[tone-link:analytics:geo-breakdown]", error.message);
+    return [];
+  }
+
+  return Array.isArray(data) ? data : [];
+}
+
+export async function getAnalyticsGeoBreakdowns(db: SupabaseLike, filters: AnalyticsEventFilters): Promise<AnalyticsGeoBreakdowns> {
+  const [countries, regions, cities] = await Promise.all([
+    getGeoBreakdown(db, filters, "country"),
+    getGeoBreakdown(db, filters, "region"),
+    getGeoBreakdown(db, filters, "city"),
+  ]);
+
+  return {
+    countryBreakdown: countries
+      .filter((row: any) => row.country)
+      .map((row: any) => ({ country: String(row.country), views: Number(row.views || 0) })),
+    regionBreakdown: regions
+      .filter((row: any) => row.country && row.region)
+      .map((row: any) => ({ country: String(row.country), region: String(row.region), views: Number(row.views || 0) })),
+    cityBreakdown: cities
+      .filter((row: any) => row.country && row.city)
+      .map((row: any) => ({ country: String(row.country), region: row.region ? String(row.region) : null, city: String(row.city), views: Number(row.views || 0) })),
   };
 }

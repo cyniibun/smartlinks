@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWorkspaceContext } from "@/lib/adminAuth";
-import { ANALYTICS_STANDARD_EVENT_TYPES, applyAnalyticsEventFilters, getAnalyticsSummaryCounts, isAnalyticsClickEvent, isAnalyticsViewEvent, type AnalyticsEventFilters } from "@/lib/analyticsAggregation";
+import { ANALYTICS_STANDARD_EVENT_TYPES, applyAnalyticsEventFilters, getAnalyticsGeoBreakdowns, getAnalyticsSummaryCounts, isAnalyticsClickEvent, isAnalyticsViewEvent, type AnalyticsEventFilters } from "@/lib/analyticsAggregation";
 import { getCampaignTimeseries, getReferrerBreakdown, getReferrerDomain, getReferrerTimeseries, getUtmCampaignBreakdown, getUtmSourceBreakdown, groupAnalyticsEvents, type AnalyticsEventRow } from "@/lib/analyticsBreakdowns";
 import { getWorkspaceEntitlements } from "@/lib/entitlements";
 import { getSupabaseAdmin } from "@/lib/supabase";
@@ -51,13 +51,17 @@ export async function GET(request: Request) {
   const baseMeta = { timezone, planId, retentionDays, canExport: entitlements.features.analytics_export, lockedRange, eventTypes: ANALYTICS_STANDARD_EVENT_TYPES, retentionLimited: Boolean(lockedRange || (retentionFloor && requestedFrom && requestedFrom < retentionFloor)) };
 
   let summary;
+  let geoBreakdowns;
   try {
-    summary = await getAnalyticsSummaryCounts(supabase, filters);
+    [summary, geoBreakdowns] = await Promise.all([
+      getAnalyticsSummaryCounts(supabase, filters),
+      getAnalyticsGeoBreakdowns(supabase, filters),
+    ]);
   } catch (error) {
     return analyticsJson({ error: error instanceof Error ? error.message : "Analytics summary failed." }, { status: 500 });
   }
 
-  if (summaryOnly) return analyticsJson({ ...baseMeta, summary: { visits: summary.visits, clicks: summary.clicks }, byPlatform: [], bySong: [], referrers: [], utmSources: [], campaigns: [], devices: [], browsers: [], timeSeries: [], recent: [], recentPage, recentLimit, configured: true, summaryOnly: true });
+  if (summaryOnly) return analyticsJson({ ...baseMeta, summary: { visits: summary.visits, clicks: summary.clicks }, byPlatform: [], bySong: [], referrers: [], utmSources: [], campaigns: [], devices: [], browsers: [], ...geoBreakdowns, timeSeries: [], recent: [], recentPage, recentLimit, configured: true, summaryOnly: true });
 
   let query = (supabase.from("click_events") as any)
     .select("*, songs(title, slug), releases(title), link_pages(title,slug), artists(name)")
@@ -108,6 +112,7 @@ export async function GET(request: Request) {
     campaigns: getUtmCampaignBreakdown(events),
     campaignTimeseries: getCampaignTimeseries(events),
     referrerTimeseries: getReferrerTimeseries(events),
+    ...geoBreakdowns,
     devices: groupAnalyticsEvents(events, (event) => event.device_type || (/mobile|android|iphone/i.test(event.user_agent || "") ? "Mobile" : "Desktop")).slice(0, 10),
     browsers: groupAnalyticsEvents(events, (event) => event.browser || "Unknown").slice(0, 10),
     timeSeries: [...timeSeriesMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
