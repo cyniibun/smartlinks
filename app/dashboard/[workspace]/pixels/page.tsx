@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { PixelsDashboard, type PixelEventSummary, type PixelHealth, type PixelProviderRow, type PixelStatus, type PixelSeriesPoint } from "@/components/admin/PixelsDashboard";
 import { getWorkspaceContext } from "@/lib/adminAuth";
+import { listWorkspacePixelConfigurations, pixelProviders, type WorkspacePixelConfiguration } from "@/lib/pixelConfigurations";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 type WorkspaceRow = {
@@ -19,16 +20,6 @@ type LinkPageRow = {
   ga_measurement_id?: string | null;
 };
 type EventRow = { event_type: string | null; created_at: string };
-
-const providers = [
-  { provider: "meta", providerName: "Meta Pixel", providerShortName: "Meta", key: "meta" },
-  { provider: "tiktok", providerName: "TikTok Pixel", providerShortName: "TikTok", key: "tiktok" },
-  { provider: "google_analytics", providerName: "Google Analytics 4", providerShortName: "GA4", key: "ga" },
-  { provider: "google_ads", providerName: "Google Ads Conversion", providerShortName: "Google Ads", key: "google_ads" },
-  { provider: "snapchat", providerName: "Snapchat Pixel", providerShortName: "Snapchat", key: "snapchat" },
-  { provider: "custom", providerName: "Custom Pixel", providerShortName: "Custom", key: "custom" },
-] as const;
-
 function compactId(value?: string | null) {
   const id = String(value || "").trim();
   if (!id) return null;
@@ -64,6 +55,13 @@ function pixelValueFor(row: WorkspaceRow | ArtistRow | LinkPageRow, key: string)
   return null;
 }
 
+function legacyProviderValue(providerKey: string, workspace: WorkspaceRow, artists: ArtistRow[], links: LinkPageRow[]) {
+  const workspaceValue = pixelValueFor(workspace, providerKey);
+  const artistValues = artists.map((row) => pixelValueFor(row, providerKey)).filter(Boolean);
+  const linkValues = links.map((row) => pixelValueFor(row, providerKey)).filter(Boolean);
+  return { workspaceValue, artistValues, linkValues };
+}
+
 function buildSeries(events: EventRow[], start: Date): PixelSeriesPoint[] {
   return Array.from({ length: 7 }).map((_, index) => {
     const day = new Date(start);
@@ -87,7 +85,8 @@ export default async function PixelsPage({ params }: { params: Promise<{ workspa
   since.setHours(0, 0, 0, 0);
   const sinceIso = since.toISOString();
 
-  const [workspace, artists, linkPages, events] = await Promise.all([
+  const [pixelConfigs, workspace, artists, linkPages, events] = await Promise.all([
+    listWorkspacePixelConfigurations(db, workspaceId),
     db.from("workspaces").select("default_tiktok_pixel_id,default_meta_pixel_id,default_ga_measurement_id").eq("id", workspaceId).maybeSingle(),
     db.from("artists").select("default_tiktok_pixel_id,default_meta_pixel_id,default_ga_measurement_id").eq("workspace_id", workspaceId).limit(500),
     db.from("link_pages").select("tiktok_pixel_id,meta_pixel_id,ga_measurement_id").eq("workspace_id", workspaceId).limit(1000),
@@ -97,34 +96,38 @@ export default async function PixelsPage({ params }: { params: Promise<{ workspa
   const artistRows = (artists.data || []) as ArtistRow[];
   const linkRows = (linkPages.data || []) as LinkPageRow[];
   const eventRows = (events.data || []) as EventRow[];
+  const configurationRows = pixelConfigs as WorkspacePixelConfiguration[];
   const totalEvents = eventRows.length;
   const lastEventAt = eventRows[0]?.created_at || null;
 
-  const rows: PixelProviderRow[] = providers.map((provider) => {
-    const workspaceValue = pixelValueFor((workspace.data || {}) as WorkspaceRow, provider.key);
-    const artistValues = artistRows.map((row) => pixelValueFor(row, provider.key)).filter(Boolean);
-    const linkValues = linkRows.map((row) => pixelValueFor(row, provider.key)).filter(Boolean);
-    const configuredId = compactId(workspaceValue || artistValues[0] || linkValues[0] || null);
-    const status = statusFor(Boolean(configuredId), totalEvents);
-    const health = healthFor(status);
+  const rows: PixelProviderRow[] = pixelProviders.map((provider) => {
+    const configs = configurationRows.filter((row) => row.provider === provider.provider);
+    const primaryConfig = configs.find((row) => row.is_default) || configs[0] || null;
+    const legacy = legacyProviderValue(provider.key, (workspace.data || {}) as WorkspaceRow, artistRows, linkRows);
+    const configuredId = compactId(primaryConfig?.pixel_id || legacy.workspaceValue || legacy.artistValues[0] || legacy.linkValues[0] || null);
+    const inferredStatus = statusFor(Boolean(configuredId), totalEvents);
+    const status = primaryConfig?.status || inferredStatus;
+    const health = primaryConfig?.health || healthFor(status);
     const configured = Boolean(configuredId);
+    const artistsUsing = artistRows.filter((row) => Boolean(pixelValueFor(row, provider.key))).length;
+    const releasesUsing = linkRows.filter((row) => Boolean(pixelValueFor(row, provider.key))).length;
 
     return {
-      id: provider.provider,
+      id: primaryConfig?.id || provider.provider,
       provider: provider.provider,
-      providerName: provider.providerName,
+      providerName: primaryConfig?.name || provider.providerName,
       providerShortName: provider.providerShortName,
       configuredId,
       status,
       health,
       events: configured ? totalEvents : 0,
-      lastEventAt: configured ? lastEventAt : null,
-      artistsUsing: artistValues.length,
-      releasesUsing: linkValues.length,
-      workspaceAssigned: Boolean(workspaceValue),
+      lastEventAt: configured ? primaryConfig?.last_event_at || lastEventAt : null,
+      artistsUsing,
+      releasesUsing,
+      workspaceAssigned: Boolean(primaryConfig?.is_default || legacy.workspaceValue),
       diagnostics: configured
         ? totalEvents > 0
-          ? [`✓ ${provider.providerShortName} is configured and ToneLink is receiving events.`, "Provider-side verification and Conversions API diagnostics will be attached in a future pass."]
+          ? [`✓ ${provider.providerShortName} is configured through workspace pixel configurations and ToneLink is receiving events.`, "Provider-side verification and Conversions API diagnostics will attach to this configuration in a future pass."]
           : [`⚠ ${provider.providerShortName} is configured but no events were recorded in the selected range.`, "Open a public release page and trigger Page View / Platform Click events to verify."]
         : [`⚠ ${provider.providerShortName} credentials are not configured.`, "Add workspace-level pixel configurations, then let artists inherit them."],
     };
