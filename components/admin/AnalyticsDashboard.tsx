@@ -87,7 +87,7 @@ function percent(count: number, total: number) {
 function DonutCard({ title, data, emptyLabel = "No data yet" }: { title: string; data: Metric[]; emptyLabel?: string }) {
   const normalized = mergeMetrics(data).slice(0, 5);
   const total = normalized.reduce((sum, item) => sum + item.count, 0);
-  const colors = ["#ff4f93", "#58d68d", "#ff8ab9", "#77f7ff", "#8f7cff"];
+  const colors = ["var(--tl-chart-primary,#ff4f93)", "#58d68d", "var(--tl-pink-2,#ff8ab9)", "#77f7ff", "#8f7cff"];
   const cardRef = useRef<HTMLElement | null>(null);
   const [active, setActive] = useState<string | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ left: number; top: number } | null>(null);

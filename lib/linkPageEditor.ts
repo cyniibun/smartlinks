@@ -37,7 +37,7 @@ export type SmartLinkEditorPage = {
   themeOverride: boolean;
   themeId: string;
   inheritedThemeId: string;
-  inheritedThemeSource: "Artist Default" | "Workspace Default" | "System Default";
+  inheritedThemeSource: "Artist Default" | "Release Default" | "System Default";
   themeSettings: ThemeSettings;
   showToneLinkHeader: boolean;
   showPoweredByFooter: boolean;
@@ -51,7 +51,7 @@ const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]
 export async function getSmartLinkEditorPage(id: string, workspaceId: string): Promise<SmartLinkEditorPage | null> {
   const db = getSupabaseAdmin(); if (!db) throw new Error("Supabase is not configured.");
   const result = await db.from("link_pages")
-    .select("*, page_links(*), releases(release_date,label_name), artists(default_theme_id), workspaces(default_theme_id)")
+    .select("*, page_links(*), releases(release_date,label_name), artists(default_theme_id), workspaces(default_theme_id,release_default_theme_id)")
     .eq("id", id).eq("workspace_id", workspaceId).maybeSingle();
   if (result.error) throw new Error(result.error.message); if (!result.data) return null;
   const row = result.data as Record<string, unknown> & { page_links?: Array<Record<string, unknown>>; releases?: Record<string, unknown> | Array<Record<string, unknown>> | null };
@@ -60,9 +60,9 @@ export async function getSmartLinkEditorPage(id: string, workspaceId: string): P
   const availableThemes=(themesResult.data?.length?themesResult.data:systemThemes).map((theme:any)=>({...theme,settings:resolveThemeSettings(theme.settings)}));
   const layout=(row.layout_settings || {}) as {themeId?:string;selectedThemeId?:string;themeSettings?:unknown;themeOverride?:unknown;themeMode?:string;themeOverrideSettings?:unknown;footerText?:string;branding?:{showToneLinkHeader?:boolean;showPoweredByFooter?:boolean}};
   const artist=Array.isArray(row.artists)?row.artists[0]:row.artists as {default_theme_id?:string}|undefined;
-  const workspace=Array.isArray(row.workspaces)?row.workspaces[0]:row.workspaces as {default_theme_id?:string}|undefined;
-  const inheritedThemeId=artist?.default_theme_id||workspace?.default_theme_id||"minimal-dark";
-  const inheritedThemeSource=artist?.default_theme_id?"Artist Default":workspace?.default_theme_id?"Workspace Default":"System Default";
+  const workspace=Array.isArray(row.workspaces)?row.workspaces[0]:row.workspaces as {default_theme_id?:string;release_default_theme_id?:string}|undefined;
+  const inheritedThemeId=artist?.default_theme_id||workspace?.release_default_theme_id||workspace?.default_theme_id||"minimal-dark";
+  const inheritedThemeSource=artist?.default_theme_id?"Artist Default":(workspace?.release_default_theme_id||workspace?.default_theme_id)?"Release Default":"System Default";
   const overrideEnabled=layout.themeMode==="override" || layout.themeOverride === true;
   const themeId=overrideEnabled && (layout.selectedThemeId || layout.themeId) ? String(layout.selectedThemeId || layout.themeId) : inheritedThemeId;
   const themeRecord=availableThemes.find(theme=>theme.id===themeId);

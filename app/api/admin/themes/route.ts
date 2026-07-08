@@ -72,17 +72,31 @@ export async function PATCH(request: Request) {
   if (!db) return NextResponse.json({ error: "Supabase unavailable" }, { status: 500 });
 
   const entitlements = await getWorkspaceEntitlements(context.workspace.id, context.user, context.role);
-  if (body.action === "set_workspace_default") {
-    if (!canAdmin(context.role)) return NextResponse.json({ error: "Only owners, admins, and developers can set workspace defaults." }, { status: 403 });
+  if (body.action === "set_release_default" || body.action === "set_workspace_default") {
+    if (!canAdmin(context.role)) return NextResponse.json({ error: "Only owners, admins, and developers can set release defaults." }, { status: 403 });
     const themeId = String(body.themeId || "minimal-dark");
     const updated = await db
       .from("workspaces")
-      .update({ default_theme_id: themeId, default_theme: themeId, updated_at: new Date().toISOString() })
+      .update({ release_default_theme_id: themeId, default_theme_id: themeId, default_theme: themeId, updated_at: new Date().toISOString() })
       .eq("id", context.workspace.id)
-      .select("id,default_theme_id")
+      .select("id,release_default_theme_id,default_theme_id")
       .single();
 
-    if (updated.error) return genericApiError("themes:set-default:error", updated.error, { workspaceId: context.workspace.id, themeId }, 400, "Unable to set workspace default theme.");
+    if (updated.error) return genericApiError("themes:set-release-default:error", updated.error, { workspaceId: context.workspace.id, themeId }, 400, "Unable to set release default theme.");
+    return NextResponse.json({ workspace: updated.data, entitlements });
+  }
+
+  if (body.action === "set_workspace_display") {
+    if (!canAdmin(context.role)) return NextResponse.json({ error: "Only owners, admins, and developers can set workspace display themes." }, { status: 403 });
+    const themeId = String(body.themeId || "tonelink");
+    const updated = await db
+      .from("workspaces")
+      .update({ workspace_display_theme_id: themeId, updated_at: new Date().toISOString() })
+      .eq("id", context.workspace.id)
+      .select("id,workspace_display_theme_id")
+      .single();
+
+    if (updated.error) return genericApiError("themes:set-workspace-display:error", updated.error, { workspaceId: context.workspace.id, themeId }, 400, "Unable to set workspace display theme.");
     return NextResponse.json({ workspace: updated.data, entitlements });
   }
 

@@ -50,7 +50,23 @@ export const minimalDarkTheme: ThemeSettings = {
   blurIntensity: "strong",
 };
 
+export const toneLinkTheme: ThemeSettings = {
+  ...minimalDarkTheme,
+  backgroundStyle: "minimal_dark",
+  gradientPreset: "radial_top_right",
+  backgroundIntensity: "medium",
+  accentColor: "#ff4f93",
+  secondaryAccentColor: "#ff7bb2",
+  buttonTextColor: "#ffffff",
+  buttonBackgroundColor: "#ff4f93",
+  buttonBorderColor: "#ff4f93",
+  mutedTextColor: "#a8a1a8",
+  buttonStyle: "glass",
+  autoButtonContrast: true,
+};
+
 export const systemThemes: ThemeRecord[] = [
+  { id: "tonelink", name: "ToneLink", description: "Default dashboard display theme for ToneLink workspaces.", is_system_theme: true, settings: toneLinkTheme },
   { id: "minimal-dark", name: "Minimal Dark", description: "Premium dark default for music links.", is_system_theme: true, settings: minimalDarkTheme },
   { id: "neon", name: "Neon", description: "High contrast glow with saturated accent.", is_system_theme: true, settings: { ...minimalDarkTheme, backgroundStyle: "neon", gradientPreset: "dual_glow", accentColor: "#77f7ff", secondaryAccentColor: "#df5d93", buttonStyle: "outline", typographyScale: "large", backgroundIntensity: "strong" } },
   { id: "luxury", name: "Luxury", description: "Warm, polished, spacious presentation.", is_system_theme: true, settings: { ...minimalDarkTheme, backgroundStyle: "luxury", gradientPreset: "radial_top_right", accentColor: "#d8b46a", secondaryAccentColor: "#7d4b22", layoutDensity: "spacious", cardRadius: "soft" } },
@@ -129,5 +145,32 @@ export function themeCssVars(settings: ThemeSettings): CssVars {
     "--theme-radius": settings.cardRadius === "pill" ? "34px" : settings.cardRadius === "soft" ? "18px" : "30px",
     "--theme-button-radius": settings.cardRadius === "pill" ? "999px" : "15px",
     "--theme-blur": settings.blurIntensity === "none" ? "0px" : settings.blurIntensity === "soft" ? "36px" : "90px",
+  };
+}
+
+export function isSafeHexColor(value: unknown): value is string {
+  return typeof value === "string" && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim());
+}
+
+function normalizeHex(value: unknown, fallback: string) {
+  if (!isSafeHexColor(value)) return fallback;
+  const hex = value.trim();
+  if (hex.length === 4) return `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`.toLowerCase();
+  return hex.toLowerCase();
+}
+
+export function dashboardThemeCssVars(settings?: Partial<ThemeSettings> | null): CssVars {
+  const accent = normalizeHex(settings?.accentColor, toneLinkTheme.accentColor);
+  const secondary = normalizeHex(settings?.secondaryAccentColor, toneLinkTheme.secondaryAccentColor);
+  return {
+    "--tl-accent": accent,
+    "--tl-accent-soft": rgba(accent, 0.22),
+    "--tl-accent-muted": rgba(accent, 0.1),
+    "--tl-focus": rgba(accent, 0.42),
+    "--tl-chart-primary": accent,
+    "--tl-pink": accent,
+    "--tl-pink-2": secondary,
+    "--tl-line-hot": rgba(accent, 0.42),
+    "--pink": accent,
   };
 }
