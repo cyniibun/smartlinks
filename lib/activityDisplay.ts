@@ -1,7 +1,7 @@
 const eventLabels: Record<string, string> = {
   platform_click: "Platform Click",
   page_view: "Page View",
-  view_content: "Content View",
+  view_content: "Engaged View",
   visit: "Visit",
   share: "Share",
   click: "Click",
