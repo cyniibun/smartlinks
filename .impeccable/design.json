@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 2,
+  "colorMeta": {
+    "ink": {
+      "role": "base",
+      "purpose": "Primary product and public-page background.",
+      "tonalRamp": ["#050506", "#08080a", "#0b0b0d", "#111113", "#1a1a1d", "#2b2b30", "#6f6b72", "#f4f0e9"]
+    },
+    "pink": {
+      "role": "accent",
+      "purpose": "Primary brand accent for CTAs, active states, chart marks, and selection.",
+      "tonalRamp": ["#1d0711", "#3a1022", "#702442", "#a83f68", "#df5d93", "#ff7faf", "#ffc0d7", "#fff0f6"]
+    },
+    "green": {
+      "role": "success",
+      "purpose": "Platform-click and positive action signal.",
+      "tonalRamp": ["#06120b", "#0d2316", "#1a452b", "#2f784a", "#58d68d", "#8ce8b1", "#c9f7da", "#f0fff5"]
+    }
+  },
+  "typographyMeta": {
+    "body": {
+      "role": "application",
+      "purpose": "Practical SaaS UI text with high legibility."
+    },
+    "display": {
+      "role": "headings",
+      "purpose": "Large confident product and public-release headings."
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "admin-primary",
+      "description": "Main dashboard CTA for create, export, publish, and save actions.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary{min-height:48px;padding:0 20px;border:0;border-radius:14px;background:#ff4f93;color:#fff;font-family:Arial,Helvetica,sans-serif;font-weight:800;letter-spacing:-.01em;box-shadow:0 12px 34px rgba(255,79,147,.22);transition:transform .18s ease,filter .18s ease}.ds-btn-primary:hover{transform:translateY(-1px);filter:brightness(1.06)}.ds-btn-primary:focus-visible{outline:2px solid rgba(255,79,147,.8);outline-offset:3px}"
+    },
+    {
+      "name": "Admin Panel",
+      "kind": "card",
+      "refersTo": "admin-panel",
+      "description": "Canonical dashboard card container.",
+      "html": "<section class=\"ds-panel\"><h2>Analytics</h2><p>Deep insights into your audience, clicks, and campaigns.</p></section>",
+      "css": ".ds-panel{padding:28px;border:1px solid rgba(255,255,255,.12);border-radius:24px;background:#111113;color:#f4f0e9;font-family:Arial,Helvetica,sans-serif;box-shadow:0 24px 70px rgba(0,0,0,.28)}.ds-panel h2{margin:0 0 8px;font-size:22px;letter-spacing:-.03em}.ds-panel p{margin:0;color:#aaa8ad;line-height:1.5}"
+    },
+    {
+      "name": "Public Platform Button",
+      "kind": "button",
+      "refersTo": "platform-button",
+      "description": "Destination selector on public smart-link pages.",
+      "html": "<a class=\"ds-platform-button\" href=\"#\"><span class=\"ds-platform-icon\">♬</span><span>Spotify</span></a>",
+      "css": ".ds-platform-button{min-height:70px;padding:12px 13px;display:flex;align-items:center;gap:11px;border:1px solid rgba(255,255,255,.1);border-radius:15px;background:rgba(255,255,255,.055);color:#f7f3f5;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-weight:700;transition:transform .2s ease,background .2s ease,border-color .2s ease}.ds-platform-button:hover{border-color:rgba(255,255,255,.27);background:rgba(255,255,255,.12);transform:translateY(-2px)}.ds-platform-button:focus-visible{outline:2px solid rgba(223,93,147,.75);outline-offset:3px}.ds-platform-icon{width:35px;height:35px;display:grid;place-items:center;border-radius:50%;background:rgba(255,255,255,.1);color:#1ed760}"
+    },
+    {
+      "name": "Event Badge",
+      "kind": "chip",
+      "refersTo": "event-badge",
+      "description": "Compact activity-feed event type label.",
+      "html": "<span class=\"ds-event-badge\">Platform Click</span>",
+      "css": ".ds-event-badge{display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:0 10px;border:1px solid rgba(88,214,141,.28);border-radius:999px;background:rgba(88,214,141,.13);color:#a8f0c1;font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}"
+    }
+  ],
+  "narrative": {
+    "northStar": "A matte-black control room for music campaigns.",
+    "overview": "ToneLink should feel like a premium operating system for release marketing: quiet, dark, precise, and campaign-aware. The dashboard uses a 12-column card grid, soft pink accent, large rounded cards, and restrained elevation.",
+    "keyCharacteristics": [
+      "Matte black and charcoal surfaces.",
+      "Soft pink accent, not purple.",
+      "Large rounded cards with subtle borders.",
+      "Spacious grid-based dashboards.",
+      "Human-readable labels in executive surfaces.",
+      "Compact, conversion-first public mobile layouts."
+    ],
+    "rules": [
+      { "name": "The Pink Is Sparse Rule", "body": "Pink is a signal, not wallpaper.", "section": "colors" },
+      { "name": "The Matte Surface Rule", "body": "Default surfaces are nearly black; cards lift through borders and shadows, never gloss.", "section": "colors" },
+      { "name": "The Large Heading Rule", "body": "Product pages should use large, confident headings with tight letter spacing.", "section": "typography" },
+      { "name": "The Quiet Lift Rule", "body": "Cards lift through a thin border, dark translucent fill, and soft shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do preserve the dark matte product identity.",
+      "Do keep layouts spacious and grid-aligned.",
+      "Do use pink sparingly for interaction and emphasis.",
+      "Do show loading states before empty states."
+    ],
+    "donts": [
+      "Don't make ToneLink look like a generic Linktree clone.",
+      "Don't use generic admin-template cards or crowded enterprise dashboards.",
+      "Don't use excessive glassmorphism, blur, neon, or bright purple.",
+      "Don't fabricate analytics, map highlights, campaign names, progress bars, or usage limits."
+    ]
+  }
+}
+

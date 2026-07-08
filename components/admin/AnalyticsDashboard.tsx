@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { FocusEvent, MouseEvent, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { WorldCountryMap, getCountryName } from "@/components/analytics/WorldCountryMap";
 import { AsyncError } from "@/components/admin/AsyncError";
 import { formatWorkspaceDate } from "@/lib/timezone";
@@ -88,17 +88,39 @@ function DonutCard({ title, data, emptyLabel = "No data yet" }: { title: string;
   const normalized = mergeMetrics(data).slice(0, 5);
   const total = normalized.reduce((sum, item) => sum + item.count, 0);
   const colors = ["#ff4f93", "#58d68d", "#ff8ab9", "#77f7ff", "#8f7cff"];
+  const cardRef = useRef<HTMLElement | null>(null);
   const [active, setActive] = useState<string | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{ left: number; top: number } | null>(null);
   const circumference = 2 * Math.PI * 42;
   let offset = 0;
   const activeItem = normalized.find((item) => item.name === active);
-  return <section className="admin-panel metric-panel analytics-donut-card"><div className="panel-title"><h2>{title}</h2></div>{normalized.length ? <div className="donut-layout"><div className="donut-chart interactive" onMouseLeave={() => setActive(null)}><svg viewBox="0 0 120 120" aria-label={`${title} distribution`} role="img">{normalized.map((item, index) => {
+  const activate = (name: string, event: MouseEvent<Element> | FocusEvent<Element>) => {
+    setActive(name);
+    const card = cardRef.current;
+    if (!card) return;
+    const cardRect = card.getBoundingClientRect();
+    const targetRect = event.currentTarget.getBoundingClientRect();
+    const tooltipWidth = 168;
+    const tooltipHeight = 88;
+    const padding = 14;
+    const eventClientX = "clientX" in event && event.clientX ? event.clientX : targetRect.left + targetRect.width / 2;
+    const eventClientY = "clientY" in event && event.clientY ? event.clientY : targetRect.top + targetRect.height / 2;
+    let left = eventClientX - cardRect.left + 14;
+    let top = eventClientY - cardRect.top - tooltipHeight - 12;
+    if (left + tooltipWidth > cardRect.width - padding) left = eventClientX - cardRect.left - tooltipWidth - 14;
+    if (top < padding) top = eventClientY - cardRect.top + 14;
+    left = Math.min(Math.max(left, padding), Math.max(cardRect.width - tooltipWidth - padding, padding));
+    top = Math.min(Math.max(top, padding), Math.max(cardRect.height - tooltipHeight - padding, padding));
+    setTooltipPosition({ left, top });
+  };
+  const clearActive = () => { setActive(null); setTooltipPosition(null); };
+  return <section ref={cardRef} className="admin-panel metric-panel analytics-donut-card"><div className="panel-title"><h2>{title}</h2></div>{normalized.length ? <div className="donut-layout"><div className="donut-chart interactive" onMouseLeave={clearActive}><svg viewBox="0 0 120 120" aria-label={`${title} distribution`} role="img">{normalized.map((item, index) => {
     const length = item.count / total * circumference;
     const dashOffset = -offset;
     offset += length;
     const isDimmed = Boolean(active && active !== item.name);
-    return <circle key={item.name} className={`donut-segment ${isDimmed ? "dimmed" : ""} ${active === item.name ? "active" : ""}`} cx="60" cy="60" r="42" fill="none" stroke={colors[index % colors.length]} strokeWidth="22" strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={dashOffset} pathLength={circumference} transform="rotate(-90 60 60)" tabIndex={0} role="button" aria-label={`${displayPlatformName(item.name, item.name)}: ${formatCount(item.count)} clicks, ${percent(item.count, total)} percent`} onMouseEnter={() => setActive(item.name)} onFocus={() => setActive(item.name)} onBlur={() => setActive(null)} />;
-  })}</svg><div className="donut-center"><span>{formatCount(total)}</span><small>clicks</small></div>{activeItem && <div className="donut-tooltip" role="tooltip"><strong>{displayPlatformName(activeItem.name, activeItem.name)}</strong><span>{formatCount(activeItem.count)} clicks</span><span>{percent(activeItem.count, total)}%</span></div>}</div><div className="donut-legend">{normalized.map((item, index) => <button type="button" key={item.name} className={active === item.name ? "active" : ""} onMouseEnter={() => setActive(item.name)} onFocus={() => setActive(item.name)} onBlur={() => setActive(null)}><i style={{ background: colors[index % colors.length] }} /><span>{displayPlatformName(item.name, item.name)}</span><strong>{percent(item.count, total)}%</strong><small>{formatCount(item.count)}</small></button>)}</div></div> : <div className="analytics-empty"><strong>{emptyLabel}</strong><p>Distribution appears after matching events are recorded.</p></div>}</section>;
+    return <circle key={item.name} className={`donut-segment ${isDimmed ? "dimmed" : ""} ${active === item.name ? "active" : ""}`} cx="60" cy="60" r="42" fill="none" stroke={colors[index % colors.length]} strokeWidth="22" strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={dashOffset} pathLength={circumference} transform="rotate(-90 60 60)" tabIndex={0} role="button" aria-label={`${displayPlatformName(item.name, item.name)}: ${formatCount(item.count)} clicks, ${percent(item.count, total)} percent`} onMouseEnter={(event) => activate(item.name, event)} onMouseMove={(event) => activate(item.name, event)} onFocus={(event) => activate(item.name, event)} onBlur={clearActive} />;
+  })}</svg><div className="donut-center"><span>{formatCount(total)}</span><small>clicks</small></div>{activeItem && tooltipPosition && <div className="donut-tooltip" style={tooltipPosition} role="tooltip"><strong>{displayPlatformName(activeItem.name, activeItem.name)}</strong><span>{formatCount(activeItem.count)} clicks</span><span>{percent(activeItem.count, total)}%</span></div>}</div><div className="donut-legend">{normalized.map((item, index) => <button type="button" key={item.name} className={active === item.name ? "active" : ""} onMouseEnter={(event) => activate(item.name, event)} onMouseMove={(event) => activate(item.name, event)} onFocus={(event) => activate(item.name, event)} onBlur={clearActive}><i style={{ background: colors[index % colors.length] }} /><span>{displayPlatformName(item.name, item.name)}</span><strong>{percent(item.count, total)}%</strong><small>{formatCount(item.count)}</small></button>)}</div></div> : <div className="analytics-empty"><strong>{emptyLabel}</strong><p>Distribution appears after matching events are recorded.</p></div>}</section>;
 }
 
 function CountriesCard({ data }: { data?: CountryMetric[] }) {
