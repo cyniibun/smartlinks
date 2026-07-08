@@ -7,7 +7,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://link.tone-link.com"),
-  title: { default: "tone-link — Music Smart Links", template: "%s | tone-link" },
+  title: { default: "tone-link — Music Marketing OS", template: "%s | tone-link" },
   description: "Choose your preferred platform and listen to your favorite releases."
 };
 

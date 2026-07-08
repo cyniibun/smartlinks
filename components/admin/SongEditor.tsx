@@ -21,7 +21,7 @@ export function SongEditor({ initialSong }: { initialSong?: SongPage }) {
   };
   return <main className="admin-main editor">
     <div className="admin-title-row">
-      <div><span className="admin-kicker">{song.id ? "EDIT RELEASE" : "NEW RELEASE"}</span><h1>{song.title || "Untitled smart link"}</h1></div>
+      <div><span className="admin-kicker">{song.id ? "EDIT RELEASE" : "NEW RELEASE"}</span><h1>{song.title || "Untitled release"}</h1></div>
       <div className="editor-actions"><a href={song.slug ? `/${song.slug}` : "#"} target="_blank">Preview</a><button className="admin-secondary" onClick={() => void save(false)} disabled={saving}>Save draft</button><button className="admin-primary" onClick={() => void save(true)} disabled={saving}>Publish</button></div>
     </div>
     {error && <div className="admin-alert error">{error}</div>}

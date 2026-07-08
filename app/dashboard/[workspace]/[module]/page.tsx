@@ -1,11 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/adminAuth";
 const modules: Record<string, { title: string; description: string }> = {
-  "link-pages": { title: "Link Pages", description: "Released links, presaves, bios, podcasts, events, and short links." },
+  "link-pages": { title: "Releases", description: "Published releases, drafts, presaves, podcasts, events, and short links." },
   campaigns: { title: "Campaigns", description: "Organize tracked traffic and campaign performance." },
   analytics: { title: "Analytics", description: "Workspace and entity-level performance filters are being connected." },
   fans: { title: "Fans", description: "Audience capture and consent-based fan data." },
-  pixels: { title: "Pixels", description: "Reusable tracking pixels and artist defaults." },
+  pixels: { title: "Pixels", description: "Tracking integrations, health checks, verification, and recent pixel events." },
   domains: { title: "Domains", description: "Custom domains and routing configuration." },
   team: { title: "Team", description: "Workspace membership and role management." },
   billing: { title: "Billing", description: "Plan limits are active; Stripe billing comes later." },

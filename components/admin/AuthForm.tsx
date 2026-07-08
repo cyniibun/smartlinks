@@ -61,7 +61,7 @@ export function AuthForm({ mode, error, message }: { mode: "login" | "signup"; e
   };
   return <main className="admin-login"><div className="admin-login-card auth-card">
     <div className="auth-brand"><span>tone-link</span></div><h1>{signup ? "Create your account" : "Welcome back"}</h1>
-    <p>{signup ? "Start building tracked smart links." : "Sign in to your workspace."}</p>
+    <p>{signup ? "Start building tracked release pages." : "Sign in to your workspace."}</p>
     <form action={signup ? "/api/auth/signup" : "/api/admin/login"} method="post" className="auth-stacked-form">
     {signup && <input name="company" tabIndex={-1} autoComplete="off" className="auth-honeypot" aria-hidden="true" />}
     <label>Email<input name="email" type="email" autoComplete="email" required /></label>
