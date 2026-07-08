@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { WorkspaceEntitlements } from "@/lib/entitlements";
 import type { ThemeRecord } from "@/lib/themes";
 
@@ -98,6 +98,11 @@ function ArtistPanel({ workspaceId, artist, themes, entitlements, onClose, onSav
   const canAdvancedDefaults = entitlements.developer || entitlements.features.custom_themes || entitlements.features.unlimited_artists;
   const canBioLinks = entitlements.developer || entitlements.features.bio_pages;
   const analyticsHref = `/dashboard/${workspaceId}/analytics?artistId=${artist.id}`;
+  useEffect(() => {
+    setDraft(artist);
+    setTab("Overview");
+    setError("");
+  }, [artist]);
   const save = async () => {
     setSaving(true); setError("");
     try {
@@ -160,7 +165,7 @@ function ArtistPanel({ workspaceId, artist, themes, entitlements, onClose, onSav
 
 export function ArtistsManager({ workspaceId, initialArtists, themes, entitlements }: { workspaceId: string; initialArtists: ArtistWithStats[]; themes: ThemeRecord[]; entitlements: WorkspaceEntitlements }) {
   const [artists, setArtists] = useState(initialArtists);
-  const [selectedId, setSelectedId] = useState(initialArtists[0]?.id || "");
+  const [selectedId, setSelectedId] = useState("");
   const selected = selectedId ? artists.find((artist) => artist.id === selectedId) : null;
   const totals = useMemo(() => ({
     artists: artists.length,
@@ -172,15 +177,15 @@ export function ArtistsManager({ workspaceId, initialArtists, themes, entitlemen
   return <main className="admin-main artists-v2">
     <div className="admin-title-row"><div><span className="admin-kicker">ARTISTS</span><h1>Artists</h1><p>Manage artist identities, branding, defaults, and performance.</p></div><div className="editor-actions"><Link className="admin-secondary" href={`/dashboard/${workspaceId}/create`}>Create release</Link></div></div>
     <div className="stat-grid artist-kpi-strip"><article><span>Total artists</span><strong>{formatCount(totals.artists)}</strong></article><article><span>Active artists</span><strong>{formatCount(totals.active)}</strong></article><article><span>Total link views</span><strong>{formatCount(totals.views)}</strong></article><article><span>Total clicks</span><strong>{formatCount(totals.clicks)}</strong></article></div>
-    <div className="artists-v2-layout">
+    <div className={`artists-v2-layout ${selected ? "has-panel" : ""}`}>
       <section className="admin-panel artists-v2-list"><div className="panel-title"><h2>All Artists</h2></div>{artists.length ? <div className="artists-v2-table">
         <div className="artists-v2-row header"><span>Artist</span><span>Releases</span><span>Views</span><span>Clicks</span><span>CTR</span><span>Status</span><span>Actions</span></div>
         {artists.map((artist) => <button type="button" key={artist.id} className={`artists-v2-row ${selected?.id === artist.id ? "selected" : ""}`} onClick={() => setSelectedId(artist.id)}>
-          <span className="artist-v2-identity"><ArtistAvatar artist={artist} /><span><strong>{artist.name}</strong><small>{artist.default_label_name || artist.slug || "No label default"}</small></span></span>
-          <span>{artist.stats.releaseCount}</span><span>{formatCount(artist.stats.views)}</span><span>{formatCount(artist.stats.clicks)}</span><span>{artist.stats.ctr}%</span><span><i className={`status-dot status-${artist.status || "active"}`} />{statusLabel(artist.status)}</span><span>View</span>
+          <span className="artist-v2-identity"><ArtistAvatar artist={artist} /><span><strong>{artist.name}</strong><small>{artist.slug ? `/${artist.slug}` : "No artist slug"}</small></span></span>
+          <span>{artist.stats.releaseCount}</span><span>{formatCount(artist.stats.views)}</span><span>{formatCount(artist.stats.clicks)}</span><span>{artist.stats.ctr}%</span><span><i className={`status-dot status-${artist.status || "active"}`} />{statusLabel(artist.status)}</span><span><i className="artist-row-action">Manage</i></span>
         </button>)}
       </div> : <div className="empty-state">No artists yet. Create one while building a release.</div>}</section>
-      {selected && <ArtistPanel workspaceId={workspaceId} artist={selected} themes={themes} entitlements={entitlements} onClose={() => setSelectedId("")} onSaved={saveArtist} />}
+      {selected && <ArtistPanel key={selected.id} workspaceId={workspaceId} artist={selected} themes={themes} entitlements={entitlements} onClose={() => setSelectedId("")} onSaved={saveArtist} />}
     </div>
   </main>;
 }
