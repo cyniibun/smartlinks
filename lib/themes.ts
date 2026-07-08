@@ -148,12 +148,14 @@ export function themeCssVars(settings: ThemeSettings): CssVars {
   };
 }
 
-export function isSafeHexColor(value: unknown): value is string {
+export function validateThemeHexColor(value: unknown): value is string {
   return typeof value === "string" && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim());
 }
 
+export const isSafeHexColor = validateThemeHexColor;
+
 function normalizeHex(value: unknown, fallback: string) {
-  if (!isSafeHexColor(value)) return fallback;
+  if (!validateThemeHexColor(value)) return fallback;
   const hex = value.trim();
   if (hex.length === 4) return `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`.toLowerCase();
   return hex.toLowerCase();
@@ -168,6 +170,10 @@ export function dashboardThemeCssVars(settings?: Partial<ThemeSettings> | null):
     "--tl-accent-muted": rgba(accent, 0.1),
     "--tl-focus": rgba(accent, 0.42),
     "--tl-chart-primary": accent,
+    "--tl-map-highlight": accent,
+    "--tl-map-highlight-soft": rgba(accent, 0.24),
+    "--tl-map-base": "rgba(255,255,255,.12)",
+    "--tl-map-border": "rgba(255,255,255,.055)",
     "--tl-pink": accent,
     "--tl-pink-2": secondary,
     "--tl-line-hot": rgba(accent, 0.42),

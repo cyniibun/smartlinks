@@ -53,10 +53,9 @@ function getGeoIso2(geography: Record<string, any>) {
   return numericToIso2[id] || "";
 }
 
-function getCountryFill(value: number, max: number) {
-  if (!value) return "rgba(255,255,255,.12)";
-  const opacity = 0.26 + value / Math.max(max, 1) * 0.58;
-  return `rgba(255,79,147,${opacity.toFixed(2)})`;
+function getCountryOpacity(value: number, max: number) {
+  if (!value) return undefined;
+  return 0.35 + value / Math.max(max, 1) * 0.65;
 }
 
 export function WorldCountryMap({ countries }: { countries: CountryValue[] }) {
@@ -71,13 +70,16 @@ export function WorldCountryMap({ countries }: { countries: CountryValue[] }) {
           const iso2 = getGeoIso2(geo);
           const metric = iso2 ? countryValueByCode.get(iso2) : undefined;
           const value = metric?.value || 0;
+          const opacity = getCountryOpacity(value, max);
           const name = metric?.countryName || getCountryName(iso2);
           return <Geography
             key={geo.rsmKey || geo.id}
             geography={geo}
-            fill={getCountryFill(value, max)}
-            stroke="rgba(255,255,255,.055)"
+            // Map colors are restricted to validated dashboard CSS variables. Do not pass raw user theme values into SVG/D3 props.
+            fill={value ? "var(--tl-map-highlight)" : "var(--tl-map-base)"}
+            stroke="var(--tl-map-border)"
             strokeWidth={0.35}
+            opacity={opacity}
             tabIndex={value ? 0 : -1}
             aria-label={value ? `${name}: ${value} views` : undefined}
             className={value ? "has-data" : "no-data"}
