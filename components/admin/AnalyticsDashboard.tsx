@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { WorldHeatMap, getCountryName } from "@/components/analytics/WorldHeatMap";
+import { WorldCountryMap, getCountryName } from "@/components/analytics/WorldCountryMap";
 import { AsyncError } from "@/components/admin/AsyncError";
 import { formatWorkspaceDate } from "@/lib/timezone";
 import { displayUtmCampaign, displayUtmMedium, displayUtmSource } from "@/lib/utm";
@@ -105,7 +105,7 @@ function CountriesCard({ data }: { data?: CountryMetric[] }) {
   const rows = (data || []).slice(0, 6);
   const max = Math.max(...rows.map((item) => item.views), 1);
   const mapCountries = rows.map((item) => ({ countryCode: item.country, countryName: getCountryName(item.country), value: item.views }));
-  return <section className="admin-panel metric-panel countries-card"><div className="panel-title"><h2>Top Countries</h2></div><div className="countries-layout"><div className="world-map-visual"><WorldHeatMap countries={mapCountries} /></div>{rows.length ? <div className="bar-list">{rows.map((item) => <div className="bar-item" key={item.country}><div><span>{getCountryName(item.country)}</span><strong>{formatCount(item.views)} views</strong></div><i style={{ width: `${item.views / max * 100}%` }} /></div>)}</div> : <div className="analytics-empty"><strong>Country data will appear once geo tracking is enabled.</strong><p>New page-view events can include privacy-safe country, region, and city fields when the hosting edge provides them.</p></div>}</div></section>;
+  return <section className="admin-panel metric-panel countries-card"><div className="panel-title"><h2>Top Countries</h2></div><div className="countries-layout"><div className="world-map-visual"><WorldCountryMap countries={mapCountries} /></div>{rows.length ? <div className="bar-list">{rows.map((item) => <div className="bar-item" key={item.country}><div><span>{getCountryName(item.country)}</span><strong>{formatCount(item.views)} views</strong></div><i style={{ width: `${item.views / max * 100}%` }} /></div>)}</div> : <div className="analytics-empty"><strong>Country data will appear once geo tracking is enabled.</strong><p>New page-view events can include privacy-safe country, region, and city fields when the hosting edge provides them.</p></div>}</div></section>;
 }
 
 const analyticsTabs = ["Overview", "Audience", "Releases", "Campaigns", "Platforms", "Referrers", "Events", "Pixels"] as const;

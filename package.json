@@ -17,6 +17,7 @@
     "react": "latest",
     "react-dom": "latest",
     "react-icons": "latest",
+    "react-simple-maps": "^3.0.0",
     "stripe": "^22.3.0",
     "tailwindcss": "latest",
     "ws": "^8.21.0"
