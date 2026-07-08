@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { canAdmin, getWorkspaceContext } from "@/lib/adminAuth";
+import { logApiError } from "@/lib/apiSecurity";
 import { getSiteUrl } from "@/lib/authUrls";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getStripe } from "@/lib/stripeBilling";
@@ -27,11 +28,11 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("[tone-link:billing:portal]", error);
     const message = error instanceof Error ? error.message : "Billing portal failed.";
+    logApiError("billing:portal:error", error);
     const readable = /No such customer|resource_missing/i.test(message)
       ? "Stripe could not find this workspace customer in the current Stripe environment. Check whether your Vercel Stripe secret key is using the same test/live mode as the saved customer."
-      : message;
-    return NextResponse.json({ error: readable, detail: message }, { status: 500 });
+      : "Billing portal failed.";
+    return NextResponse.json({ error: readable }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { canAdmin, getWorkspaceContext } from "@/lib/adminAuth";
+import { genericApiError } from "@/lib/apiSecurity";
 import { getSiteUrl } from "@/lib/authUrls";
 import { ensureStripeCustomer, getStripe, priceIdForPlan } from "@/lib/stripeBilling";
 
@@ -33,7 +34,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("[tone-link:billing:checkout]", error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Checkout failed." }, { status: 500 });
+    return genericApiError("billing:checkout:error", error, {}, 500, "Checkout failed.");
   }
 }

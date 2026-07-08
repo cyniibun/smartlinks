@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/adminAuth";
 import { ensureUserWorkspace } from "@/lib/authBootstrap";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { getSupabasePublic } from "@/lib/supabase";
 
 export async function POST(request: Request) {
@@ -9,6 +10,15 @@ export async function POST(request: Request) {
   const password = String(form.get("password") || "");
   const supabase = getSupabasePublic();
   if (!supabase) return NextResponse.redirect(new URL("/login?error=not-configured", request.url), 303);
+  const ip = getClientIp(request);
+  const normalizedEmail = email.toLowerCase();
+  if (
+    !checkRateLimit(request, `admin-login:ip:${ip}`, 20) ||
+    !checkRateLimit(request, `admin-login:email:${normalizedEmail}`, 8)
+  ) {
+    console.warn("[tone-link:admin-login:rate-limited]", { ip, hasEmail: Boolean(normalizedEmail) });
+    return NextResponse.redirect(new URL("/login?error=too-many-attempts", request.url), 303);
+  }
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.session) return NextResponse.redirect(new URL("/login?error=invalid-credentials", request.url), 303);
   if (!data.user.email_confirmed_at) return NextResponse.redirect(new URL(`/check-email?email=${encodeURIComponent(email)}`, request.url), 303);

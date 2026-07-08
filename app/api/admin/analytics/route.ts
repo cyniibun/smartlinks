@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWorkspaceContext } from "@/lib/adminAuth";
+import { logApiError } from "@/lib/apiSecurity";
 import { ANALYTICS_STANDARD_EVENT_TYPES, applyAnalyticsEventFilters, getAnalyticsGeoBreakdowns, getAnalyticsSummaryCounts, isAnalyticsClickEvent, isAnalyticsViewEvent, type AnalyticsEventFilters } from "@/lib/analyticsAggregation";
 import { getCampaignTimeseries, getReferrerBreakdown, getReferrerDomain, getReferrerTimeseries, getUtmCampaignBreakdown, getUtmSourceBreakdown, groupAnalyticsEvents, type AnalyticsEventRow } from "@/lib/analyticsBreakdowns";
 import { getWorkspaceEntitlements } from "@/lib/entitlements";
@@ -58,7 +59,8 @@ export async function GET(request: Request) {
       getAnalyticsGeoBreakdowns(supabase, filters),
     ]);
   } catch (error) {
-    return analyticsJson({ error: error instanceof Error ? error.message : "Analytics summary failed." }, { status: 500 });
+    logApiError("analytics:summary:error", error, { workspaceId: context.workspace.id });
+    return analyticsJson({ error: "Analytics summary failed." }, { status: 500 });
   }
 
   if (summaryOnly) return analyticsJson({ ...baseMeta, summary: { visits: summary.visits, clicks: summary.clicks }, byPlatform: [], bySong: [], referrers: [], utmSources: [], campaigns: [], devices: [], browsers: [], ...geoBreakdowns, timeSeries: [], recent: [], recentPage, recentLimit, configured: true, summaryOnly: true });
@@ -70,7 +72,10 @@ export async function GET(request: Request) {
   query = applyAnalyticsEventFilters(query, filters);
 
   const { data, error } = await query;
-  if (error) return analyticsJson({ error: error.message }, { status: 500 });
+  if (error) {
+    logApiError("analytics:events:error", error, { workspaceId: context.workspace.id });
+    return analyticsJson({ error: "Unable to load analytics events." }, { status: 500 });
+  }
 
   const rawEvents = (data || []) as AnalyticsEventRow[];
   const events: AnalyticsEventRow[] = rawEvents.map((event) => ({
