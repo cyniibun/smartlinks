@@ -11,44 +11,51 @@ import { UtilityButton } from "@/components/UtilityButton";
 import { trackUtility, trackView } from "@/lib/tracking";
 import { copyText } from "@/lib/copyText";
 import { minimalDarkTheme, themeCssVars } from "@/lib/themes";
+import { getVisitorIdentity, type VisitorIdentityPayload } from "@/lib/analytics/visitor";
 
 export function SongSmartLinkPage({ song }: { song: SongPage }) {
   const [copied, setCopied] = useState(false);
   const [embedOpen, setEmbedOpen] = useState(false);
   const links = useMemo(() => song.links.filter((link) => link.enabled).sort((a, b) => a.order - b.order), [song.links]);
 
-  const sendInternalEvent = (eventType: string) => {
-    const params = new URLSearchParams(window.location.search);
+  const sendInternalEvent = (eventType: string, identity: VisitorIdentityPayload = getVisitorIdentity()) => {
     const payload = JSON.stringify({ eventType, songSlug: song.slug, workspaceId: song.workspaceId, artistId: song.artistId,
       releaseId: song.releaseId, linkPageId: song.linkPageId, referrer: document.referrer, userAgent: navigator.userAgent,
-      utmSource: params.get("utm_source"), utmMedium: params.get("utm_medium"), utmCampaign: params.get("utm_campaign"),
-      utmContent: params.get("utm_content"), utmTerm: params.get("utm_term") });
+      visitorId: identity.visitor_id, externalId: identity.external_id, sessionId: identity.session_id,
+      clickIds: identity.click_ids, ttclid: identity.ttclid, fbclid: identity.fbclid, gclid: identity.gclid,
+      msclkid: identity.msclkid, twclid: identity.twclid, liFatId: identity.li_fat_id,
+      utmSource: identity.utm_source, utmMedium: identity.utm_medium, utmCampaign: identity.utm_campaign,
+      utmContent: identity.utm_content, utmTerm: identity.utm_term, normalizedReferrer: identity.normalized_referrer,
+      marketingCookies: identity.marketing_cookies, eventId: identity.event_id, eventTimestamp: identity.event_timestamp });
     if (navigator.sendBeacon) navigator.sendBeacon("/api/events", new Blob([payload], { type: "application/json" }));
     else void fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: payload, keepalive: true });
   };
 
   useEffect(() => {
-    trackView(song);
-    sendInternalEvent("page_view"); sendInternalEvent("view_content");
+    const viewIdentity = getVisitorIdentity();
+    trackView(song, viewIdentity);
+    sendInternalEvent("page_view", viewIdentity); sendInternalEvent("view_content");
     // sendInternalEvent only depends on the immutable song prop for this page load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [song]);
 
   const copyUrl = async () => {
-    trackUtility(song, "Copy URL", "copy_url");
-    sendInternalEvent("copy_url");
+    const identity = getVisitorIdentity();
+    trackUtility(song, "Copy URL", "copy_url", identity);
+    sendInternalEvent("copy_url", identity);
     if (await copyText(window.location.href)) {
       setCopied(true); setTimeout(() => setCopied(false), 1800);
     }
   };
   const share = async () => {
-    trackUtility(song, "Share", "share");
-    sendInternalEvent("share");
+    const identity = getVisitorIdentity();
+    trackUtility(song, "Share", "share", identity);
+    sendInternalEvent("share", identity);
     if (navigator.share) {
       try { await navigator.share({ title: `${song.title} by ${song.artist}`, text: `Listen to ${song.title} by ${song.artist}`, url: window.location.href }); } catch { /* share cancelled */ }
     } else if (await copyText(window.location.href)) { setCopied(true); setTimeout(() => setCopied(false), 1800); }
   };
-  const openEmbed = () => { trackUtility(song, "Embed", "embed"); sendInternalEvent("embed_click"); setEmbedOpen(true); };
+  const openEmbed = () => { const identity = getVisitorIdentity(); trackUtility(song, "Embed", "embed", identity); sendInternalEvent("embed_click", identity); setEmbedOpen(true); };
 
   const theme = song.theme || minimalDarkTheme;
   return <main className={`smart-link-shell theme-${theme.backgroundStyle} density-${theme.layoutDensity} buttons-${theme.buttonStyle} artwork-${theme.artworkSize} type-${theme.typographyScale} hero-${theme.heroLayout} mobile-hero-${theme.mobileHeroLayout}`} style={themeCssVars(theme)}>

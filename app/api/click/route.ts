@@ -4,6 +4,10 @@ import { getGeoFromHeaders } from "@/lib/analytics/geo";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { normalizeUtmValue } from "@/lib/utm";
 
+function nullableString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 export async function POST(request: Request) {
   try {
     const event = await request.json();
@@ -19,6 +23,7 @@ export async function POST(request: Request) {
       const utmCampaign = normalizeUtmValue(event.utmCampaign);
       const utmContent = normalizeUtmValue(event.utmContent);
       const utmTerm = normalizeUtmValue(event.utmTerm);
+      const clickIds = event.clickIds && typeof event.clickIds === "object" ? event.clickIds : {};
       const { error } = await supabase.from("click_events").insert({
         song_id: song?.data?.id ?? null, workspace_id: page?.data?.workspace_id ?? song?.data?.workspace_id ?? event.workspaceId ?? null,
         link_page_id: page?.data?.id ?? event.linkPageId ?? null, release_id: page?.data?.release_id ?? event.releaseId ?? null,
@@ -26,6 +31,17 @@ export async function POST(request: Request) {
         event_type: event.eventType || "click", event_name: event.eventName || null,
         platform: event.platform || null, destination_url: event.destinationUrl || null,
         referrer: event.referrer || null, user_agent: event.userAgent || request.headers.get("user-agent"),
+        visitor_id: nullableString(event.visitorId ?? event.visitor_id),
+        external_id: nullableString(event.externalId ?? event.external_id ?? event.visitorId ?? event.visitor_id),
+        session_id: nullableString(event.sessionId ?? event.session_id),
+        ttclid: nullableString(event.ttclid ?? clickIds.ttclid),
+        fbclid: nullableString(event.fbclid ?? clickIds.fbclid),
+        gclid: nullableString(event.gclid ?? clickIds.gclid),
+        msclkid: nullableString(event.msclkid ?? clickIds.msclkid),
+        twclid: nullableString(event.twclid ?? clickIds.twclid),
+        li_fat_id: nullableString(event.liFatId ?? event.li_fat_id ?? clickIds.li_fat_id),
+        normalized_referrer: nullableString(event.normalizedReferrer ?? event.normalized_referrer),
+        event_id: nullableString(event.eventId ?? event.event_id),
         ip_hash: ipHash, utm_source: utmSource, utm_medium: utmMedium,
         utm_campaign: utmCampaign, utm_content: utmContent, utm_term: utmTerm,
         country: geo.country, region: geo.region, city: geo.city, timezone: geo.timezone,

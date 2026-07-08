@@ -5,21 +5,28 @@ import { FiArrowUpRight } from "react-icons/fi";
 import type { SongLink, SongPage } from "@/data/songs";
 import { PlatformIcon } from "@/lib/platformIcons";
 import { trackPlatformClick } from "@/lib/tracking";
+import { getVisitorIdentity } from "@/lib/analytics/visitor";
 
 const TRACKING_REDIRECT_DELAY_MS = 600;
 
 export function PlatformButton({ song, link }: { song: SongPage; link: SongLink }) {
   const handlePlatformClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    trackPlatformClick(song, link);
+    const identity = getVisitorIdentity();
+    trackPlatformClick(song, link, identity);
     const params = new URLSearchParams(window.location.search);
     const payload = JSON.stringify({
       songSlug: song.slug, songTitle: song.title, workspaceId: song.workspaceId, artistId: song.artistId,
       releaseId: song.releaseId, linkPageId: song.linkPageId, platform: link.platform, eventType: "platform_click",
       destinationUrl: link.url, referrer: document.referrer,
       userAgent: navigator.userAgent, timestamp: new Date().toISOString(),
-      utmSource: params.get("utm_source"), utmMedium: params.get("utm_medium"),
-      utmCampaign: params.get("utm_campaign"), utmContent: params.get("utm_content"), utmTerm: params.get("utm_term")
+      visitorId: identity.visitor_id, externalId: identity.external_id, sessionId: identity.session_id,
+      clickIds: identity.click_ids, ttclid: identity.ttclid, fbclid: identity.fbclid, gclid: identity.gclid,
+      msclkid: identity.msclkid, twclid: identity.twclid, liFatId: identity.li_fat_id,
+      utmSource: identity.utm_source, utmMedium: identity.utm_medium,
+      utmCampaign: identity.utm_campaign, utmContent: identity.utm_content, utmTerm: identity.utm_term,
+      normalizedReferrer: identity.normalized_referrer, marketingCookies: identity.marketing_cookies,
+      eventId: identity.event_id, eventTimestamp: identity.event_timestamp
     });
     try {
       if (navigator.sendBeacon) navigator.sendBeacon("/api/click", new Blob([payload], { type: "application/json" }));

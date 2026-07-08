@@ -1,11 +1,12 @@
 import type { SongLink, SongPage } from "@/data/songs";
+import type { VisitorIdentityPayload } from "@/lib/analytics/visitor";
 
 declare global {
   interface Window {
     ttq?: { track: (name: string, values?: Record<string, unknown>) => void };
     __cyniicalTtq?: { track: (name: string, values?: Record<string, unknown>) => void };
     __cyniicalTikTokInstalled?: string;
-    fbq?: (action: string, event: string, values?: Record<string, unknown>) => void;
+    fbq?: (action: string, event: string, values?: Record<string, unknown>, options?: Record<string, unknown>) => void;
     gtag?: (...args: unknown[]) => void;
     __cyniicalTikTokDebug?: { pixelId: string; loaderRequested: boolean; pageCalled: boolean; lastClick: null | { event: string; properties: Record<string, unknown>; at: string }; testEventCode?: string | null };
   }
@@ -33,19 +34,25 @@ function trackTikTok(name: string, values: Record<string, unknown>) {
   (window.ttq || window.__cyniicalTtq)?.track(name, payload);
 }
 
-export function trackView(song: SongPage) {
+export function trackView(song: SongPage, identity?: VisitorIdentityPayload) {
   const payload = {
     content_id: song.pixelEvents.contentId,
     content_name: song.pixelEvents.contentName,
-    artist_name: song.pixelEvents.artistName
+    artist_name: song.pixelEvents.artistName,
+    ...(identity ? {
+      external_id: identity.external_id,
+      event_id: identity.event_id,
+      ttclid: identity.ttclid,
+      _ttp: identity.ttp
+    } : {})
   };
   if (new URLSearchParams(window.location.search).get("debugPixel") === "1") console.log("ttq exists:", Boolean(window.ttq), "tracking ViewContent:", payload);
   trackTikTok("ViewContent", payload);
-  window.fbq?.("track", "ViewContent", { content_ids: [song.pixelEvents.contentId], content_name: song.pixelEvents.contentName });
-  window.gtag?.("event", "view_item", { song_slug: song.slug, song_title: song.title, artist: song.artist });
+  window.fbq?.("track", "ViewContent", { content_ids: [song.pixelEvents.contentId], content_name: song.pixelEvents.contentName, event_id: identity?.event_id, fbp: identity?.fbp, fbc: identity?.fbc }, identity?.event_id ? { eventID: identity.event_id } : undefined);
+  window.gtag?.("event", "view_item", { song_slug: song.slug, song_title: song.title, artist: song.artist, event_id: identity?.event_id, session_id: identity?.session_id });
 }
 
-export function trackPlatformClick(song: SongPage, link: SongLink) {
+export function trackPlatformClick(song: SongPage, link: SongLink, identity?: VisitorIdentityPayload) {
   const payload = {
     button_text: link.label,
     action: "platform_click",
@@ -53,7 +60,13 @@ export function trackPlatformClick(song: SongPage, link: SongLink) {
     destination_url: link.url,
     content_id: song.slug,
     content_name: song.title,
-    artist_name: song.artist
+    artist_name: song.artist,
+    content_type: "platform_click",
+    external_id: identity?.external_id,
+    session_id: identity?.session_id,
+    event_id: identity?.event_id,
+    ttclid: identity?.ttclid,
+    _ttp: identity?.ttp
   };
   if (new URLSearchParams(window.location.search).get("debugPixel") === "1") {
     console.log("ttq exists:", Boolean(window.ttq));
@@ -61,18 +74,29 @@ export function trackPlatformClick(song: SongPage, link: SongLink) {
   }
   try {
     trackTikTok("ClickButton", payload);
-    window.fbq?.("trackCustom", "MusicPlatformClick", payload);
+    window.fbq?.("trackCustom", "MusicPlatformClick", { ...payload, fbp: identity?.fbp, fbc: identity?.fbc }, identity?.event_id ? { eventID: identity.event_id } : undefined);
     window.gtag?.("event", "music_platform_click", payload);
   } catch (error) { console.warn("Pixel tracking failed", error); }
   return payload;
 }
 
-export function trackUtility(song: SongPage, label: "Copy URL" | "Share" | "Embed", action: "copy_url" | "share" | "embed") {
-  const payload = { button_text: label, action, content_id: song.slug, content_name: song.title, artist_name: song.artist };
+export function trackUtility(song: SongPage, label: "Copy URL" | "Share" | "Embed", action: "copy_url" | "share" | "embed", identity?: VisitorIdentityPayload) {
+  const payload = {
+    button_text: label,
+    action,
+    content_id: song.slug,
+    content_name: song.title,
+    artist_name: song.artist,
+    external_id: identity?.external_id,
+    session_id: identity?.session_id,
+    event_id: identity?.event_id,
+    ttclid: identity?.ttclid,
+    _ttp: identity?.ttp
+  };
   if (new URLSearchParams(window.location.search).get("debugPixel") === "1") console.log(`tracking ${action}:`, payload);
   try {
     trackTikTok("ClickButton", payload);
-    window.fbq?.("trackCustom", "SmartLinkUtilityClick", payload);
+    window.fbq?.("trackCustom", "SmartLinkUtilityClick", { ...payload, fbp: identity?.fbp, fbc: identity?.fbc }, identity?.event_id ? { eventID: identity.event_id } : undefined);
     window.gtag?.("event", "smart_link_utility_click", payload);
   } catch (error) { console.warn("Pixel tracking failed", error); }
 }
