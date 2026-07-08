@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { getSiteUrl } from "@/lib/authUrls";
 import { createClient } from "@/lib/supabase/client";
 
 function GoogleIcon() {
@@ -24,13 +25,15 @@ export function AuthForm({ mode, error, message }: { mode: "login" | "signup"; e
     : error === "oauth-flow-mismatch" ? "Google returned an outdated sign-in response. Please try again."
     : error);
   useEffect(() => {
-    if (!window.location.hash) return;
+    const search = new URLSearchParams(window.location.search);
     const hash = new URLSearchParams(window.location.hash.slice(1));
     const hasTokenHash = hash.has("access_token") || hash.has("refresh_token");
     const hasErrorHash = hash.has("error") || hash.has("error_description");
-    if (!hasTokenHash && !hasErrorHash) return;
-    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-    setClientError(hasTokenHash ? "Google returned an outdated sign-in response. Please try again." : hash.get("error_description") || "Google sign-in could not be completed.");
+    const hasAuthSearchError = search.has("error");
+    if (!hasTokenHash && !hasErrorHash && !hasAuthSearchError) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    if (hasTokenHash) setClientError("Google returned an outdated sign-in response. Please try again.");
+    else if (hasErrorHash) setClientError(hash.get("error_description") || "Google sign-in could not be completed.");
   }, []);
   const startGoogle = async () => {
     if (oauthStarted.current) return;
@@ -45,12 +48,12 @@ export function AuthForm({ mode, error, message }: { mode: "login" | "signup"; e
       return;
     }
     console.info("[tone-link:auth]", "starting-google-oauth");
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+    const siteUrl = getSiteUrl();
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${siteUrl}/auth/callback`,
-        queryParams: { access_type: "offline", prompt: "consent" },
+        queryParams: { access_type: "offline", prompt: "select_account" },
       },
     });
     if (oauthError) {
