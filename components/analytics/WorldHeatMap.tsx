@@ -17,15 +17,26 @@ const countryNames: Record<string, string> = {
 };
 
 const highlightShapes: Record<string, { d: string; label: string }> = {
-  US: { label: "United States", d: "M133 122c27-14 65-14 91-2 8 4 8 17-1 22-28 15-69 13-95-4-7-5-5-12 5-16Z" },
-  CA: { label: "Canada", d: "M118 74c43-22 95-21 132-4 15 7 11 24-7 28-42 10-93 8-132-8-14-6-8-12 7-16Z" },
-  MX: { label: "Mexico", d: "M177 161c23-1 44 8 55 25 8 13 1 25-14 22-25-5-43-23-51-39-3-6 2-8 10-8Z" },
-  BR: { label: "Brazil", d: "M283 213c33-7 61 16 62 47 1 26-28 47-50 31-20-14-39-65-12-78Z" },
-  GB: { label: "United Kingdom", d: "M314 100c13-8 25-4 28 8 3 11-8 21-22 17-12-3-19-18-6-25Z" },
-  DE: { label: "Germany", d: "M357 112c17-7 32 5 29 22-3 15-22 18-33 7-9-9-8-24 4-29Z" },
-  FR: { label: "France", d: "M335 138c20-8 38 5 38 24 0 16-18 27-35 18-15-8-18-34-3-42Z" },
-  AU: { label: "Australia", d: "M500 233c42-7 78 12 83 42 5 25-28 38-64 25-32-12-57-59-19-67Z" },
+  US: { label: "United States", d: "M112 121l18-10 29-4 31 5 18 12-5 15-27 7-36-1-29-9-6-8z" },
+  CA: { label: "Canada", d: "M91 65l39-17 47 2 33 12 34-2 23 14-14 19-55 6-56-6-44 8-26-16z" },
+  MX: { label: "Mexico", d: "M145 150l31 4 24 15 12 22-18 6-24-16-28-18z" },
+  BR: { label: "Brazil", d: "M245 201l26-13 32 12 15 31-8 37-25 27-24-19-15-39z" },
+  GB: { label: "United Kingdom", d: "M305 94l13-8 15 6-1 14-13 6-12-6z" },
+  DE: { label: "Germany", d: "M345 111l17-5 15 11-3 21-17 7-16-12z" },
+  FR: { label: "France", d: "M326 125l24-6 17 16-5 23-22 9-20-17z" },
+  AU: { label: "Australia", d: "M492 231l45-10 47 18 19 30-21 30-43 4-45-23-17-28z" },
 };
+
+const baseLandMasses = [
+  "M73 79l30-27 45-18 48 4 30 14 33-3 36 17-9 18-39 11-22 19 21 18-8 23-42 4-34-12-28 10-37-3-36-23-22-27z",
+  "M150 161l35 10 28 25 20 39 28 21 5 33-22 25-30-25-18-41-23-34-28-24z",
+  "M292 78l23-18 41 0 41 14 48-7 55 14 48 25 26 38-25 23-53-9-41 12-44-7-33 13-47-20-36 7-27-19 4-33z",
+  "M365 159l33-12 49 7 39 22 21 36-12 47-29 34-31-12-20-49-30-28-28-16z",
+  "M508 64l55 8 43 26 13 34-29 15-50-9-36-25-22-30z",
+  "M482 226l52-13 51 14 31 36-10 33-40 18-55-12-42-29z",
+  "M315 99l15-8 17 6-4 16-17 5z",
+  "M612 283l14-6 11 8-7 11-15 0z",
+];
 
 function normalizeCountryCode(value: string) {
   const code = String(value || "").trim().toUpperCase();
@@ -46,12 +57,7 @@ export function WorldHeatMap({ countries }: { countries: CountryValue[] }) {
   return <svg className="world-heat-map" viewBox="0 0 640 320" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="world-heat-map-title">
     <title id="world-heat-map-title">World map showing countries with analytics data</title>
     <g className="map-base">
-      <path d="M92 98c37-39 111-47 160-23 34 17 27 56-7 78-43 28-103 17-139-13-19-16-27-29-14-42Z" />
-      <path d="M171 181c36-5 71 14 84 44 15 35-8 79-43 83-29 3-58-39-62-77-2-22 3-47 21-50Z" />
-      <path d="M298 87c76-35 165-31 235 5 32 17 27 52-11 68-62 27-133-4-192 17-46 16-85-59-32-90Z" />
-      <path d="M381 169c55-10 128-1 160 33 31 33 8 76-44 75-43-1-67-39-107-47-42-8-61-51-9-61Z" />
-      <path d="M475 64c48-18 102-2 125 31 19 28-14 52-58 43-40-8-99-48-67-74Z" />
-      <path d="M448 236c46-10 96 12 117 48 18 30-18 50-62 35-43-15-93-70-55-83Z" />
+      {baseLandMasses.map((d, index) => <path key={index} d={d} />)}
     </g>
     <g className="map-highlights">
       {Object.entries(highlightShapes).map(([code, shape]) => {
