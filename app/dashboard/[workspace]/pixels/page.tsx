@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { PixelsDashboard, type PixelEventSummary, type PixelHealth, type PixelProviderRow, type PixelStatus, type PixelSeriesPoint } from "@/components/admin/PixelsDashboard";
 import { getWorkspaceContext } from "@/lib/adminAuth";
+import { getWorkspaceEntitlements } from "@/lib/entitlements";
 import { listWorkspacePixelConfigurations, pixelProviders, type WorkspacePixelConfiguration } from "@/lib/pixelConfigurations";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import Link from "next/link";
 
 type WorkspaceRow = {
   default_tiktok_pixel_id?: string | null;
@@ -76,6 +78,17 @@ export default async function PixelsPage({ params }: { params: Promise<{ workspa
   const workspaceId = (await params).workspace;
   const context = await getWorkspaceContext(workspaceId);
   if (!context) redirect("/login");
+  const entitlements = await getWorkspaceEntitlements(workspaceId, context.user, context.role);
+  if (!(entitlements.features.standard_pixels || entitlements.developer)) {
+    return <main className="admin-main pixels-v2">
+      <section className="admin-panel upgrade-state">
+        <span className="admin-kicker">TRACKING</span>
+        <h1>Upgrade to use Pixels</h1>
+        <p>Tracking pixels are available on Basic and Pro plans.</p>
+        <Link className="admin-primary" href={`/dashboard/${workspaceId}/settings?section=Billing`}>View billing plans</Link>
+      </section>
+    </main>;
+  }
 
   const db = getSupabaseAdmin();
   if (!db) return null;
@@ -100,7 +113,11 @@ export default async function PixelsPage({ params }: { params: Promise<{ workspa
   const totalEvents = eventRows.length;
   const lastEventAt = eventRows[0]?.created_at || null;
 
-  const rows: PixelProviderRow[] = pixelProviders.map((provider) => {
+  const allowedProviders = entitlements.features.advanced_pixels || entitlements.developer
+    ? pixelProviders
+    : pixelProviders.filter((provider) => provider.provider !== "snapchat" && provider.provider !== "custom");
+
+  const rows: PixelProviderRow[] = allowedProviders.map((provider) => {
     const configs = configurationRows.filter((row) => row.provider === provider.provider);
     const primaryConfig = configs.find((row) => row.is_default) || configs[0] || null;
     const legacy = legacyProviderValue(provider.key, (workspace.data || {}) as WorkspaceRow, artistRows, linkRows);
@@ -143,5 +160,5 @@ export default async function PixelsPage({ params }: { params: Promise<{ workspa
     .slice(0, 6)
     .map(([eventType, count]) => ({ eventType, count, changeLabel: count ? "Active" : "—" }));
 
-  return <PixelsDashboard rows={rows} events={eventSummaries} series={buildSeries(eventRows, since)} />;
+  return <PixelsDashboard rows={rows} events={eventSummaries} series={buildSeries(eventRows, since)} canUseAdvancedPixels={entitlements.features.advanced_pixels || entitlements.developer} />;
 }

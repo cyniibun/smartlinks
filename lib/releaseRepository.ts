@@ -1,12 +1,18 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 import type { ResolvedLink } from "@/lib/resolver";
 import { validateHeadEntries } from "@/lib/headEntries";
+import { validateDestinationUrl } from "@/lib/validation/platformUrls";
 
 export type ReleaseDraft = {
   artistId?: string; newArtistName?: string; title: string; artist: string; releaseType: string;
   slug: string; artworkUrl?: string; releaseDate?: string; labelName?: string; sourceImportUrl?: string;
   importProvider?: string; importConfidence?: number; published: boolean;
   pixels?: { tiktok?: string; meta?: string; ga?: string }; links: Array<ResolvedLink & { selected: boolean }>;
+};
+
+export type ReleaseCreateOptions = {
+  allowGenericDestinations?: boolean;
+  allowHeaderInjection?: boolean;
 };
 
 async function uniqueSlug(db: NonNullable<ReturnType<typeof getSupabaseAdmin>>, requested: string) {
@@ -31,7 +37,7 @@ export async function listReleases(workspaceId: string) {
   const result = await db.from("releases").select("*, artists(name), link_pages(id,slug,published)").eq("workspace_id", workspaceId).order("updated_at", { ascending: false });
   if (result.error) throw new Error(result.error.message); return result.data || [];
 }
-export async function createRelease(workspaceId: string, draft: ReleaseDraft) {
+export async function createRelease(workspaceId: string, draft: ReleaseDraft, options: ReleaseCreateOptions = {}) {
   const db = getSupabaseAdmin(); if (!db) throw new Error("Supabase is not configured.");
   const workspaceResult=await db.from("workspaces").select("*").eq("id",workspaceId).single();if(workspaceResult.error)throw new Error(workspaceResult.error.message);const publicDomain=String(workspaceResult.data.default_public_domain||"link.tone-link.com").replace(/^https?:\/\//,"").replace(/\/$/,"");
   let artistId = draft.artistId;let artistDefaults:Record<string,unknown>|null=null;
@@ -45,7 +51,7 @@ export async function createRelease(workspaceId: string, draft: ReleaseDraft) {
   }
   const templateSlug=artistDefaults?.default_slug_pattern?applySlugPattern(String(artistDefaults.default_slug_pattern),draft.title,draft.artist):draft.slug;
   const allocatedSlug = await uniqueSlug(db, draft.slug || templateSlug);
-  const templateHeadEntries=validateHeadEntries(artistDefaults?.default_head_entries);
+  const templateHeadEntries=options.allowHeaderInjection?validateHeadEntries(artistDefaults?.default_head_entries):[];
   const templatePlatformOrder=asStringArray(artistDefaults?.default_platform_order);
   const templateEnabledPlatforms=asStringArray(artistDefaults?.default_enabled_platforms);
   const release = await db.from("releases").insert({
@@ -67,7 +73,11 @@ export async function createRelease(workspaceId: string, draft: ReleaseDraft) {
     layout_settings: { themeId: artistDefaults?.default_theme_id || null, footerText: artistDefaults?.default_footer_text || null }
   }).select("id,slug").single();
   if (page.error) { await db.from("releases").delete().eq("id", release.data.id).eq("workspace_id", workspaceId); throw new Error(page.error.message); }
-  const selected = sortLinksByTemplate(draft.links.filter((link) => link.selected && link.url).map(link=>({...link,selected:templateEnabledPlatforms.length?templateEnabledPlatforms.includes(link.platform):link.selected})).filter(link=>link.selected),templatePlatformOrder);
+  const selected = sortLinksByTemplate(draft.links.filter((link) => link.selected && link.url).map((link,index)=>{
+    const validation = validateDestinationUrl(link.platform, link.url, { allowGeneric: options.allowGenericDestinations });
+    if (!validation.ok) throw new Error(`${link.label || link.platform || `Platform ${index + 1}`}: ${validation.error}`);
+    return {...link,url:validation.normalizedUrl,selected:templateEnabledPlatforms.length?templateEnabledPlatforms.includes(link.platform):link.selected};
+  }).filter(link=>link.selected),templatePlatformOrder);
   if (selected.length) {
     const inserted = await db.from("page_links").insert(selected.map((link, index) => ({
       workspace_id: workspaceId, link_page_id: page.data.id, platform: link.platform, label: link.label,

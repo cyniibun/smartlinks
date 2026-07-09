@@ -3,6 +3,7 @@ import type { HeadEntry, PlatformType, SongLink } from "@/data/songs";
 import { validateHeadEntries } from "@/lib/headEntries";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { resolveThemeSettings, systemThemes, type ThemeSettings } from "@/lib/themes";
+import { validateDestinationUrl } from "@/lib/validation/platformUrls";
 
 export type SmartLinkEditorLink = {
   id?: string;
@@ -43,6 +44,11 @@ export type SmartLinkEditorPage = {
   showPoweredByFooter: boolean;
   links: SmartLinkEditorLink[];
   availableThemes: Array<{id:string;name:string;description?:string;is_system_theme:boolean;settings:ThemeSettings}>;
+};
+
+export type SmartLinkEditorSaveOptions = {
+  allowGenericDestinations?: boolean;
+  allowHeaderInjection?: boolean;
 };
 
 const sections = new Set(["listen", "watch", "buy", "podcast", "merch", "tickets", "other"]);
@@ -90,7 +96,7 @@ export async function getSmartLinkEditorPage(id: string, workspaceId: string): P
   };
 }
 
-export async function updateSmartLinkEditorPage(id: string, workspaceId: string, input: SmartLinkEditorPage) {
+export async function updateSmartLinkEditorPage(id: string, workspaceId: string, input: SmartLinkEditorPage, options: SmartLinkEditorSaveOptions = {}) {
   const db = getSupabaseAdmin(); if (!db) throw new Error("Supabase is not configured.");
   const current = await getSmartLinkEditorPage(id, workspaceId); if (!current) throw new Error("Smart Link not found.");
   const slug = slugify(input.slug); if (!slug) throw new Error("Enter a valid slug.");
@@ -98,11 +104,13 @@ export async function updateSmartLinkEditorPage(id: string, workspaceId: string,
   const duplicate = await db.from("link_pages").select("id").eq("slug", slug).neq("id", id).maybeSingle();
   if (duplicate.error) throw new Error(duplicate.error.message); if (duplicate.data) throw new Error(`The slug “${slug}” is already in use.`);
   const headEntries = validateHeadEntries(input.headEntries);
+  if (headEntries.length && !options.allowHeaderInjection) throw new Error("Header injection requires Pro.");
   const links = input.links.map((link, index) => {
     if (!link.url.trim()) throw new Error(`${link.label || `Platform ${index + 1}`}: URL is required.`);
-    try { new URL(link.url); } catch { throw new Error(`${link.label || `Platform ${index + 1}`}: enter a valid URL.`); }
+    const validation = validateDestinationUrl(link.platform, link.url, { allowGeneric: options.allowGenericDestinations });
+    if (!validation.ok) throw new Error(`${link.label || `Platform ${index + 1}`}: ${validation.error}`);
     if (!sections.has(link.section)) throw new Error(`${link.label}: unsupported section.`);
-    return { ...link, label: link.label.trim() || link.platform, url: link.url.trim(), order: index + 1 };
+    return { ...link, label: link.label.trim() || link.platform, url: validation.normalizedUrl, order: index + 1 };
   });
   const pageRow = {
     slug, title: input.title.trim(), subtitle: input.subtitle.trim() || null, artist_display_name: input.artist.trim(), label_name: input.labelName.trim() || null,

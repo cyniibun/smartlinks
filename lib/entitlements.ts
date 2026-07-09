@@ -18,7 +18,11 @@ export type FeatureKey =
   | "podcast_pages"
   | "merch_pages"
   | "event_pages"
-  | "bio_pages";
+  | "bio_pages"
+  | "standard_pixels"
+  | "advanced_pixels"
+  | "header_injection"
+  | "custom_destinations";
 
 export type FeatureLimitKey =
   | "artists"
@@ -38,12 +42,12 @@ export type WorkspaceEntitlements = {
   limits: FeatureLimits;
 };
 
-const featureKeys: FeatureKey[] = ["theme_studio","custom_themes","custom_domains","advanced_analytics","analytics_export","unlimited_links","unlimited_artists","remove_branding","team_members","api_access","podcast_pages","merch_pages","event_pages","bio_pages"];
+const featureKeys: FeatureKey[] = ["theme_studio","custom_themes","custom_domains","advanced_analytics","analytics_export","unlimited_links","unlimited_artists","remove_branding","team_members","api_access","podcast_pages","merch_pages","event_pages","bio_pages","standard_pixels","advanced_pixels","header_injection","custom_destinations"];
 
 const planFeatures: Record<PlanId, Partial<Record<FeatureKey, boolean>>> = {
   free: {},
-  basic: { analytics_export: true },
-  pro: { theme_studio: true, custom_themes: true, custom_domains: true, advanced_analytics: true, analytics_export: true, unlimited_links: true, unlimited_artists: true, remove_branding: true, team_members: true, podcast_pages: true, merch_pages: true, event_pages: true, bio_pages: true },
+  basic: { analytics_export: true, standard_pixels: true },
+  pro: { theme_studio: true, custom_themes: true, custom_domains: true, advanced_analytics: true, analytics_export: true, unlimited_links: true, unlimited_artists: true, remove_branding: true, team_members: true, podcast_pages: true, merch_pages: true, event_pages: true, bio_pages: true, standard_pixels: true, advanced_pixels: true, header_injection: true, custom_destinations: true },
   enterprise: Object.fromEntries(featureKeys.map(key => [key, true])) as Record<FeatureKey, boolean>,
   developer: Object.fromEntries(featureKeys.map(key => [key, true])) as Record<FeatureKey, boolean>,
 };
