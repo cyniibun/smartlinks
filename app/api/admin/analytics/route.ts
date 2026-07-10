@@ -7,6 +7,7 @@ import { getWorkspaceEntitlements } from "@/lib/entitlements";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { DEFAULT_WORKSPACE_TIMEZONE, getWorkspaceDateRange } from "@/lib/timezone";
 import { normalizeUtmValue } from "@/lib/utm";
+import { getVisitorBehaviorMetrics } from "@/lib/visitorBehavior";
 
 const csvEscape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 const dayKey = (value: string, timezone: string) => new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
@@ -53,17 +54,19 @@ export async function GET(request: Request) {
 
   let summary;
   let geoBreakdowns;
+  let visitorBehavior;
   try {
-    [summary, geoBreakdowns] = await Promise.all([
+    [summary, geoBreakdowns, visitorBehavior] = await Promise.all([
       getAnalyticsSummaryCounts(supabase, filters),
       getAnalyticsGeoBreakdowns(supabase, filters),
+      getVisitorBehaviorMetrics(supabase, filters),
     ]);
   } catch (error) {
     logApiError("analytics:summary:error", error, { workspaceId: context.workspace.id });
     return analyticsJson({ error: "Analytics summary failed." }, { status: 500 });
   }
 
-  if (summaryOnly) return analyticsJson({ ...baseMeta, summary: { visits: summary.visits, clicks: summary.clicks }, byPlatform: [], bySong: [], referrers: [], utmSources: [], campaigns: [], devices: [], browsers: [], ...geoBreakdowns, timeSeries: [], recent: [], recentPage, recentLimit, configured: true, summaryOnly: true });
+  if (summaryOnly) return analyticsJson({ ...baseMeta, summary: { visits: summary.visits, clicks: summary.clicks }, visitorBehavior, byPlatform: [], bySong: [], referrers: [], utmSources: [], campaigns: [], devices: [], browsers: [], ...geoBreakdowns, timeSeries: [], recent: [], recentPage, recentLimit, configured: true, summaryOnly: true });
 
   let query = (supabase.from("click_events") as any)
     .select("*, songs(title, slug), releases(title), link_pages(title,slug), artists(name)")
@@ -110,6 +113,7 @@ export async function GET(request: Request) {
   return analyticsJson({
     ...baseMeta,
     summary: { visits: summary.visits, clicks: summary.clicks },
+    visitorBehavior,
     byPlatform: groupAnalyticsEvents(clicks, (event) => event.platform || "Unknown").slice(0, 10),
     bySong: groupAnalyticsEvents(clicks, (event) => event.link_pages?.title || event.releases?.title || event.songs?.title || "Unknown").slice(0, 10),
     referrers: getReferrerBreakdown(events),

@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { useMemo, useState } from "react";
 import { FiActivity, FiBarChart2, FiClock, FiPlus, FiSettings, FiShare2, FiTrash2 } from "react-icons/fi";
 
@@ -21,6 +22,10 @@ export type PixelProviderRow = {
   releasesUsing: number;
   workspaceAssigned: boolean;
   diagnostics: string[];
+  lastAttemptedAt?: string | null;
+  lastSuccessfulAt?: string | null;
+  lastAcknowledgedAt?: string | null;
+  lastFailureAt?: string | null;
 };
 
 export type PixelEventSummary = { eventType: string; count: number; changeLabel?: string };
@@ -58,7 +63,12 @@ function formatDate(value: string | null) {
 }
 
 function displayEventType(value: string) {
-  return String(value || "unknown").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const normalized = String(value || "unknown");
+  if (normalized === "ViewContent") return "Content View";
+  if (normalized === "ClickButton") return "Click Button";
+  if (normalized === "MusicPlatformClick") return "Platform Click";
+  if (normalized === "SmartLinkUtilityClick") return "Utility Click";
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function PixelIcon({ provider }: { provider: PixelProviderRow["provider"] }) {
@@ -74,18 +84,32 @@ function HealthDot({ health }: { health: PixelHealth }) {
 }
 
 function EventsArea({ series }: { series: PixelSeriesPoint[] }) {
+  const [tip, setTip] = useState<{ left: number; top: number; point: PixelSeriesPoint } | null>(null);
   const max = Math.max(...series.map((point) => point.count), 1);
-  const path = series.map((point, index) => {
+  const coords = series.map((point, index) => {
     const x = series.length <= 1 ? 0 : (index / (series.length - 1)) * 100;
     const y = 94 - (point.count / max) * 78;
-    return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-  }).join(" ");
+    return { point, x, y };
+  });
+  const path = coords.map(({ x, y }, index) => `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`).join(" ");
   const area = `${path} L 100 100 L 0 100 Z`;
-  return <div className="pixel-events-chart" aria-label="Events over time">
+  function activate(event: React.MouseEvent<HTMLButtonElement> | React.FocusEvent<HTMLButtonElement>, point: PixelSeriesPoint) {
+    const button = event.currentTarget;
+    const chart = button.closest(".pixel-events-chart") as HTMLElement | null;
+    if (!chart) return;
+    const chartRect = chart.getBoundingClientRect();
+    const rect = button.getBoundingClientRect();
+    const left = Math.max(10, Math.min(rect.left - chartRect.left + rect.width / 2 - 72, chartRect.width - 154));
+    const top = Math.max(8, Math.min(rect.top - chartRect.top - 54, chartRect.height - 74));
+    setTip({ left, top, point });
+  }
+  return <div className="pixel-events-chart" aria-label="Events over time" onMouseLeave={() => setTip(null)}>
     <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img">
       <path d={area} className="pixel-chart-area" />
       <path d={path} className="pixel-chart-line" />
     </svg>
+    <div className="pixel-chart-points">{coords.map(({ point, x, y }) => <button key={point.label} type="button" style={{ left: `${x}%`, top: `${y}%` }} aria-label={`${point.label}: ${point.count} pixel events`} onMouseEnter={(event) => activate(event, point)} onFocus={(event) => activate(event, point)} onBlur={() => setTip(null)}><span /></button>)}</div>
+    {tip && <div className="pixel-chart-tooltip" role="tooltip" style={{ left: tip.left, top: tip.top }}><strong>{tip.point.label}</strong><span>{formatCount(tip.point.count)} events</span></div>}
     <div className="pixel-chart-axis">{series.map((point) => <span key={point.label}>{point.label}</span>)}</div>
   </div>;
 }
@@ -121,7 +145,7 @@ function ProviderPanel({ row, onClose }: { row: PixelProviderRow; onClose: () =>
     <div className="pixel-provider-head"><PixelIcon provider={row.provider} /><div><h2>{row.providerName}</h2><p>{row.configuredId ? `ID: ${row.configuredId}` : "No credential configured"}</p></div><button onClick={onClose} aria-label="Close provider details">×</button></div>
     <div className="pixel-panel-status"><StatusPill status={row.status} /><HealthDot health={row.health} /></div>
     <nav className="pixel-panel-tabs">{(["Overview","Configuration","Diagnostics","Events"] as const).map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</nav>
-    {tab === "Overview" && <section className="pixel-panel-section"><div className="pixel-detail-grid"><div><span>Workspace assignment</span><strong>{row.workspaceAssigned ? "Enabled" : "Not set"}</strong></div><div><span>Artists using it</span><strong>{row.artistsUsing}</strong></div><div><span>Releases using it</span><strong>{row.releasesUsing}</strong></div><div><span>Last event</span><strong>{formatDate(row.lastEventAt)}</strong></div></div><p className="muted">Conversions API, EMQ, and provider-side verification will attach here when credentials are promoted to workspace pixel configurations.</p></section>}
+    {tab === "Overview" && <section className="pixel-panel-section"><div className="pixel-detail-grid"><div><span>Workspace assignment</span><strong>{row.workspaceAssigned ? "Enabled" : "Not set"}</strong></div><div><span>Artists using it</span><strong>{row.artistsUsing}</strong></div><div><span>Releases using it</span><strong>{row.releasesUsing}</strong></div><div><span>Last attempted</span><strong>{formatDate(row.lastAttemptedAt || row.lastEventAt)}</strong></div><div><span>Last successful</span><strong>{formatDate(row.lastSuccessfulAt || row.lastEventAt)}</strong></div><div><span>Last acknowledged</span><strong>{formatDate(row.lastAcknowledgedAt || null)}</strong></div></div><p className="muted">Provider acknowledgement is only shown when ToneLink has an API/provider confirmation. Browser pixels are tracked as delivery attempts.</p></section>}
     {tab === "Configuration" && <section className="pixel-panel-section"><div className="editor-grid"><label>{row.providerName} ID<input value={row.configuredId || ""} readOnly /></label><label>Access token<input value="" readOnly placeholder="Conversions API token — future" /></label><label>Dataset / conversion label<input value="" readOnly placeholder="Provider-specific field — future" /></label></div></section>}
     {tab === "Diagnostics" && <section className="pixel-panel-section">{row.diagnostics.map((item) => <div className="pixel-diagnostic-row" key={item}>{item}</div>)}</section>}
     {tab === "Events" && <section className="pixel-panel-section"><div className="pixel-live-log"><div><span>Now</span><strong>{row.events ? "Events received" : "Waiting for events"}</strong><small>{row.events ? `${formatCount(row.events)} events in selected range` : "No recent matching activity"}</small></div></div></section>}
@@ -135,13 +159,13 @@ export function PixelsDashboard({ rows, events, series, canUseAdvancedPixels = f
   const filteredRows = useMemo(() => activeTab === "all" || activeTab === "verification" ? rows : rows.filter((row) => row.provider === activeTab), [activeTab, rows]);
   const selected = rows.find((row) => row.id === selectedId) || null;
   const configured = rows.filter((row) => row.configuredId);
-  const verified = rows.filter((row) => row.status === "verified");
+  const verified = configured.filter((row) => row.status === "verified" || row.events > 0);
   const totalEvents = events.reduce((sum, event) => sum + event.count, 0);
   const activeEvents = events.filter((event) => event.count > 0).length;
 
   return <main className="admin-main pixels-v2">
     <div className="admin-title-row pixels-header"><div><span className="admin-kicker">TRACKING</span><h1>Pixels</h1><p>Manage your tracking pixels and monitor event activity.</p></div><div className="editor-actions"><button className="admin-secondary"><FiClock /> Last 7 days</button><button className="admin-secondary"><FiShare2 /> Share</button><button className="admin-primary"><FiPlus /> Add Pixel</button></div></div>
-    <div className="stat-grid pixels-kpis"><article><span>Total Pixels</span><strong>{configured.length}</strong><small>Configured integrations</small></article><article><span>Events Fired</span><strong>{formatCount(totalEvents)}</strong><small>Last 7 days</small></article><article><span>Verified Pixels</span><strong>{verified.length} / {rows.length}</strong><small>{rows.length ? Math.round((verified.length / rows.length) * 100) : 0}% verified</small></article><article><span>Active Events</span><strong>{activeEvents}</strong><small>{events.slice(0,3).map((event) => displayEventType(event.eventType)).join(", ") || "No events yet"}</small></article></div>
+    <div className="stat-grid pixels-kpis"><article><span>Total Pixels</span><strong>{configured.length}</strong><small>Configured integrations</small></article><article><span>Events Fired</span><strong>{formatCount(totalEvents)}</strong><small>Sent/acknowledged deliveries · 7d</small></article><article><span>Verified Pixels</span><strong>{verified.length} / {configured.length}</strong><small>{configured.length ? Math.round((verified.length / configured.length) * 100) : 0}% configured verified</small></article><article><span>Active Events</span><strong>{activeEvents}</strong><small>{events.slice(0,3).map((event) => displayEventType(event.eventType)).join(", ") || "No delivery records yet"}</small></article></div>
     {!canUseAdvancedPixels && <div className="admin-alert">Custom Pixel and Snapchat Pixel are available on Pro.</div>}
     <nav className="pixels-tabs">{visibleTabs.map((tab) => <button key={tab.id} className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}</nav>
     {activeTab === "verification" ? <section className="admin-panel pixels-verification"><div className="panel-title"><div><h2>Verification</h2><p className="muted">Primary diagnostics for event receiving, provider credentials, and future Conversions API readiness.</p></div></div>{rows.map((row) => <article key={row.id}><PixelIcon provider={row.provider} /><div><strong>{row.providerName}</strong><p>{row.diagnostics[0]}</p></div><StatusPill status={row.status} /><HealthDot health={row.health} /><span>{formatDate(row.lastEventAt)}</span></article>)}</section> : <div className="pixels-v2-layout">
