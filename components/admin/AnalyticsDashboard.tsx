@@ -18,6 +18,7 @@ type Point = { date: string; views: number; clicks: number; ctr: number };
 type RecentEvent = { id: string; event_type: string; platform?: string; created_at: string; utm_source?: string; utm_medium?: string; utm_campaign?: string; device_type?: string; browser?: string; country?: string | null; songs?: { title: string }; releases?: { title: string }; link_pages?: { title: string }; referrer?: string };
 type VisitorBehavior = { uniqueVisitors: number | null; sessions: number | null; returningVisitors: number | null; repeatClickers: number | null; medianTimeToClickSeconds: number | null; engagementRate: number | null; visitorIdentityEvents: number; available: boolean };
 type Analytics = { timezone: string; planId?: string; canExport?: boolean; lockedRange?: boolean; eventTypes?: string[]; summary: { visits: number; clicks: number }; visitorBehavior?: VisitorBehavior; byPlatform: Metric[]; bySong: Metric[]; referrers: Metric[]; utmSources: Metric[]; campaigns: Metric[]; devices: Metric[]; browsers: Metric[]; countryBreakdown?: CountryMetric[]; regionBreakdown?: RegionMetric[]; cityBreakdown?: CityMetric[]; timeSeries: Point[]; recent: RecentEvent[]; configured: boolean; retentionDays?: number | null; retentionLimited?: boolean; recentPage?: number; recentHasMore?: boolean };
+type PixelSummary = { id: string; provider: string; providerName: string; name: string; safeId: string | null; status: string; health: string; lastSuccessfulEvent: string | null; events: number; assignmentScope: { workspaceDefault: boolean; artists: number; releases: number } };
 
 const emptyAnalytics: Analytics = { timezone: "America/New_York", summary: { visits: 0, clicks: 0 }, byPlatform: [], bySong: [], referrers: [], utmSources: [], campaigns: [], devices: [], browsers: [], timeSeries: [], recent: [], configured: true };
 const visibleEventTypes = ["page_view", "view_content", "platform_click"];
@@ -46,6 +47,24 @@ function Bars({ title, data, emptyLabel = "No data yet" }: { title: string; data
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+function formatCompactDateTime(value: string | null | undefined, timezone: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const safeDate = new Intl.DateTimeFormat("en-US", { timeZone: timezone, month: "short", day: "numeric" }).format(date);
+  const safeTime = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "2-digit" }).format(date);
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(yesterdayDate);
+  const eventDay = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  const eventYear = new Intl.DateTimeFormat("en-US", { timeZone: timezone, year: "numeric" }).format(date);
+  const currentYear = new Intl.DateTimeFormat("en-US", { timeZone: timezone, year: "numeric" }).format(new Date());
+  if (eventDay === today) return `Today · ${safeTime}`;
+  if (eventDay === yesterday) return `Yesterday · ${safeTime}`;
+  return `${safeDate}${eventYear !== currentYear ? `, ${eventYear}` : ""} · ${safeTime}`;
 }
 
 function normalizeMetricName(name: string) {
@@ -168,7 +187,7 @@ function InsightCard({ title, children }: { title: string; children: ReactNode }
 
 function EventLog({ data, filters, updateFilter }: { data: Analytics; filters: { recentPage: string }; updateFilter: (patch: { recentPage: string }) => void }) {
   const visibleRecent = data.recent.filter((event) => visibleEventTypes.includes(event.event_type));
-  return <section className="admin-panel analytics-events-card" id="recent-events"><div className="panel-title"><div><h2>Recent activity</h2><p className="muted">Showing 50 events per page.</p></div><div className="pagination-row compact"><button disabled={filters.recentPage === "1"} onClick={() => updateFilter({ recentPage: String(Math.max(Number(filters.recentPage) - 1, 1)) })}>Previous</button><span>Page {filters.recentPage}</span><button disabled={!data.recentHasMore} onClick={() => updateFilter({ recentPage: String(Number(filters.recentPage) + 1) })}>Next</button></div></div>{visibleRecent.length ? <div className="recent-table analytics-recent">{visibleRecent.map((e) => <div key={e.id}><time>{formatWorkspaceDate(e.created_at, data.timezone, true)}</time><span className={eventBadgeClass(e.event_type)}>{displayEventType(e.event_type)}</span><strong>{e.link_pages?.title || e.releases?.title || e.songs?.title || "Unknown"}</strong><span>{displayPlatformName(e.platform)}</span><span>{e.referrer || "Direct"}</span><span>{displayUtmSource(e.utm_source)}</span><span>{displayUtmCampaign(e.utm_campaign)}</span><span>{displayUtmMedium(e.utm_medium)}</span><span>{e.device_type || "Unknown"}</span></div>)}</div> : <div className="analytics-empty"><strong>No recent events yet</strong><p>Page View, Engaged View, and Platform Click events will appear here after tracking records them.</p></div>}</section>;
+  return <section className="admin-panel analytics-events-card" id="recent-events"><div className="panel-title"><div><h2>Recent activity</h2><p className="muted">Showing 50 events per page.</p></div><div className="pagination-row compact"><button disabled={filters.recentPage === "1"} onClick={() => updateFilter({ recentPage: String(Math.max(Number(filters.recentPage) - 1, 1)) })}>Previous</button><span>Page {filters.recentPage}</span><button disabled={!data.recentHasMore} onClick={() => updateFilter({ recentPage: String(Number(filters.recentPage) + 1) })}>Next</button></div></div>{visibleRecent.length ? <div className="recent-table analytics-recent">{visibleRecent.map((e) => <div key={e.id}><time>{formatWorkspaceDate(e.created_at, data.timezone, true)}</time><span className={eventBadgeClass(e.event_type)}>{displayEventType(e.event_type)}</span><strong>{e.link_pages?.title || e.releases?.title || e.songs?.title || "Unknown"}</strong><span className="mobile-event-meta">{displayPlatformName(e.platform)} · {formatCompactDateTime(e.created_at, data.timezone)}</span><span>{displayPlatformName(e.platform)}</span><span>{e.referrer || "Direct"}</span><span>{displayUtmSource(e.utm_source)}</span><span>{displayUtmCampaign(e.utm_campaign)}</span><span>{displayUtmMedium(e.utm_medium)}</span><span>{e.device_type || "Unknown"}</span></div>)}</div> : <div className="analytics-empty"><strong>No recent events yet</strong><p>Page View, Engaged View, and Platform Click events will appear here after tracking records them.</p></div>}</section>;
 }
 
 function countryFlag(country?: string | null) {
@@ -182,8 +201,12 @@ function RecentClicks({ data }: { data: Analytics }) {
   return <section className="admin-panel analytics-recent-clicks"><div className="panel-title"><div><h2>Recent Clicks</h2><p className="muted">Outbound actions only. Full event log lives in Events.</p></div></div>{clicks.length ? <div className="recent-click-strip">{clicks.map((event) => {
     const platform = displayPlatformName(event.platform);
     const flag = countryFlag(event.country);
-    return <article key={event.id}><span className={`platform-mini-icon platform-${event.platform || "other"}`}>{platform.slice(0, 1)}</span><div><strong>{platform} click</strong><small>{event.link_pages?.title || event.releases?.title || event.songs?.title || "Unknown"}</small><em>{formatWorkspaceDate(event.created_at, data.timezone, true)}</em></div>{flag && <span className="country-flag" aria-label={event.country || ""}>{flag}</span>}</article>;
+    return <article key={event.id}><span className={`platform-mini-icon platform-${event.platform || "other"}`}>{platform.slice(0, 1)}</span><div><strong>{platform} click</strong><small>{event.link_pages?.title || event.releases?.title || event.songs?.title || "Unknown"}</small><em>{formatCompactDateTime(event.created_at, data.timezone)}</em></div>{flag && <span className="country-flag" aria-label={event.country || ""}>{flag}</span>}</article>;
   })}</div> : <div className="analytics-empty"><strong>No recent platform clicks yet</strong><p>Clicks to Spotify, Apple Music, YouTube, and other destinations will appear here.</p></div>}</section>;
+}
+
+function PixelSummaryPanel({ workspaceId, pixels, loading, timezone }: { workspaceId?: string; pixels: PixelSummary[]; loading: boolean; timezone: string }) {
+  return <section className="admin-panel metric-panel analytics-pixels-panel"><div className="panel-title"><div><h2>Assigned Pixels</h2><p className="muted">Read-only status for configured workspace pixel connections.</p></div>{workspaceId && <a className="admin-secondary" href={`/dashboard/${workspaceId}/pixels`}>Manage Pixels</a>}</div>{loading ? <div className="pixel-summary-list">{Array.from({ length: 3 }).map((_, index) => <span key={index} className="skeleton skeleton-line" />)}</div> : pixels.length ? <div className="pixel-summary-list">{pixels.map((pixel) => <article key={pixel.id}><span className={`pixel-provider-icon provider-${pixel.provider}`}>{pixel.providerName.slice(0, 2)}</span><div><strong>{pixel.name}</strong><small>{pixel.providerName} · {pixel.safeId || "Safe ID hidden"}</small><em>{pixel.assignmentScope.workspaceDefault ? "Workspace default" : "Assigned"} · {pixel.assignmentScope.artists} artists · {pixel.assignmentScope.releases} releases</em></div><div><span className={`pixel-status status-${pixel.status.toLowerCase() === "active" ? "verified" : pixel.status.toLowerCase() === "error" ? "error" : "pending"}`}>{pixel.status}</span><small>{pixel.events} events</small><small>Last success: {formatCompactDateTime(pixel.lastSuccessfulEvent, timezone)}</small></div></article>)}</div> : <div className="analytics-empty"><strong>No pixels are currently assigned.</strong><p>Configure workspace pixels or assign existing pixel defaults to artists/releases.</p>{workspaceId && <a className="admin-primary" href={`/dashboard/${workspaceId}/pixels`}>Configure Pixels</a>}</div>}</section>;
 }
 
 export function AnalyticsDashboard({ workspaceId, artistId = "", releaseId = "", linkPageId = "", artists = [], linkPages = [] }: { workspaceId?: string; artistId?: string; releaseId?: string; linkPageId?: string; artists?: Option[]; linkPages?: Option[] }) {
@@ -195,6 +218,8 @@ export function AnalyticsDashboard({ workspaceId, artistId = "", releaseId = "",
   const [detail, setDetail] = useState("");
   const [filters, setFilters] = useState({ range: "7", from: "", to: "", eventType: "", platform: "", utmSource: "", utmCampaign: "", artistId, releaseId, linkPageId, recentPage: "1" });
   const [activeTab, setActiveTab] = useState<AnalyticsTab>("Overview");
+  const [pixelSummaries, setPixelSummaries] = useState<PixelSummary[]>([]);
+  const [pixelsLoading, setPixelsLoading] = useState(false);
   const queryBase = useMemo(() => { const q = new URLSearchParams(); if (workspaceId) q.set("workspaceId", workspaceId); q.set("range", filters.range); if (filters.range === "custom") { if (filters.from) q.set("from", new Date(`${filters.from}T00:00:00`).toISOString()); if (filters.to) q.set("to", new Date(`${filters.to}T23:59:59`).toISOString()); } q.set("recentPage", filters.recentPage); q.set("recentLimit", "50"); q.set("limit", "1000"); Object.entries(filters).forEach(([k, v]) => { if (v && !["range", "from", "to", "recentPage"].includes(k)) q.set(k, v); }); return q; }, [workspaceId, filters]);
   const buildQuery = (summary = false) => { const q = new URLSearchParams(queryBase); if (summary) q.set("summary", "1"); return q; };
   const hasMeaningfulData = (next: Analytics) => Boolean(next.summary.visits || next.summary.clicks || next.timeSeries.some((point) => point.views || point.clicks) || next.recent.length);
@@ -203,6 +228,21 @@ export function AnalyticsDashboard({ workspaceId, artistId = "", releaseId = "",
     fetch(`/api/admin/analytics?${buildQuery(true)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error || `Analytics summary failed (${r.status})`); setData((current) => ({ ...current, ...j })); setSummaryLoading(false); return fetch(`/api/admin/analytics?${buildQuery(false)}`); }).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error || `Analytics breakdown failed (${r.status})`); setData(j); setLoadState(hasMeaningfulData(j) ? "loaded_with_data" : "loaded_empty"); }).catch((e) => { setLoadState("error"); setError("Unable to load analytics."); setDetail(e instanceof Error ? e.message : "Analytics request failed."); }).finally(() => { setSummaryLoading(false); setBreakdownLoading(false); });
   };
   useEffect(load, [queryBase]);
+  useEffect(() => {
+    if (activeTab !== "Pixels" || !workspaceId) return;
+    const q = new URLSearchParams();
+    q.set("workspaceId", workspaceId);
+    if (filters.range === "custom") {
+      if (filters.from) q.set("from", new Date(`${filters.from}T00:00:00`).toISOString());
+      if (filters.to) q.set("to", new Date(`${filters.to}T23:59:59`).toISOString());
+    }
+    setPixelsLoading(true);
+    fetch(`/api/admin/pixel-deliveries?${q}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error(`Pixel status failed (${response.status})`)))
+      .then((payload) => setPixelSummaries(Array.isArray(payload.summary) ? payload.summary : []))
+      .catch(() => setPixelSummaries([]))
+      .finally(() => setPixelsLoading(false));
+  }, [activeTab, workspaceId, filters.range, filters.from, filters.to]);
   const exportHref = `/api/admin/analytics?${new URLSearchParams([...queryBase.entries(), ["export", "csv"]])}`;
   const updateFilter = (patch: Partial<typeof filters>) => setFilters((current) => ({ ...current, ...patch, recentPage: patch.recentPage || "1" }));
   const loaded = loadState === "loaded_with_data" || loadState === "loaded_empty";
@@ -228,7 +268,7 @@ export function AnalyticsDashboard({ workspaceId, artistId = "", releaseId = "",
       case "Events":
         return <EventLog data={data} filters={filters} updateFilter={updateFilter} />;
       case "Pixels":
-        return <div className="analytics-grid analytics-v2-grid"><InsightCard title="Pixel health"><div className="analytics-empty"><strong>Pixel diagnostics will appear here.</strong><p>Use this tab for TikTok, Meta, and GA4 event delivery checks. Visitor identity improves match quality, but raw visitor IDs stay hidden.</p></div></InsightCard><EventLog data={data} filters={filters} updateFilter={updateFilter} /></div>;
+        return <div className="analytics-grid analytics-v2-grid"><PixelSummaryPanel workspaceId={workspaceId} pixels={pixelSummaries} loading={pixelsLoading} timezone={data.timezone} /></div>;
       default:
         return <><div className="analytics-grid analytics-v2-grid"><TimeSeriesChart data={data.timeSeries} workspaceId={workspaceId} loaded={loaded} /><DonutCard title="Top Platforms" data={data.byPlatform} emptyLabel="No platform clicks yet" /><CountriesCard data={data.countryBreakdown} /><Bars title="Top Referrers" data={data.referrers.map((item) => ({ ...item, name: item.name || "Direct" }))} emptyLabel="No referrers yet" /><Bars title="Top Campaigns" data={data.campaigns} emptyLabel="No UTM campaigns yet" /><Bars title="Top Releases" data={data.bySong} /><Bars title="UTM Sources" data={data.utmSources} emptyLabel="No UTM sources yet" /><DonutCard title="Device Breakdown" data={normalizedDevices} emptyLabel="No device data yet" /><Bars title="Browsers" data={data.browsers} /></div><RecentClicks data={data} /></>;
     }

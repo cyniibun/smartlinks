@@ -11,9 +11,13 @@ export type PixelDeliveryRow = {
   id: string;
   workspace_id: string;
   pixel_connection_id: string | null;
+  link_page_id?: string | null;
+  release_id?: string | null;
+  artist_id?: string | null;
   provider: PixelDeliveryProvider;
   pixel_id: string | null;
   internal_event_id: string | null;
+  internal_event_type?: string | null;
   provider_event_name: string;
   event_id: string | null;
   dedupe_key: string;
@@ -75,4 +79,3 @@ export async function listPixelDeliveries(db: SupabaseLike, workspaceId: string,
 export function isSuccessfulPixelDelivery(row: Pick<PixelDeliveryRow, "status">) {
   return (PIXEL_DELIVERY_SUCCESS_STATUSES as readonly string[]).includes(row.status);
 }
-

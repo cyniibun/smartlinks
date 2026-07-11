@@ -56,8 +56,12 @@ export async function POST(request: Request) {
     const row = {
       workspace_id: workspaceId,
       pixel_connection_id: connection?.id || null,
+      link_page_id: page?.data?.id || nullableString(body.linkPageId ?? body.link_page_id),
+      release_id: page?.data?.release_id || nullableString(body.releaseId ?? body.release_id),
+      artist_id: page?.data?.artist_id || nullableString(body.artistId ?? body.artist_id),
       provider,
       pixel_id: pixelId || connection?.pixel_id || null,
+      internal_event_type: nullableString(body.internalEventType ?? body.internal_event_type),
       provider_event_name: providerEventName,
       event_id: eventId,
       dedupe_key: dedupeKey,
@@ -86,4 +90,3 @@ export async function POST(request: Request) {
     return json(400, { ok: false, error: "Invalid JSON payload." });
   }
 }
-

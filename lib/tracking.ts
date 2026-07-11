@@ -23,7 +23,7 @@ export function withTikTokTestCode(payload: Record<string, unknown> = {}) {
   return { ...payload, ...(testCode ? { test_event_code: testCode } : {}) };
 }
 
-function sendPixelDelivery(song: SongPage, input: { provider: "tiktok" | "meta" | "google_analytics"; providerEventName: string; eventId?: string | null; pixelId?: string | null; testEvent?: boolean }) {
+function sendPixelDelivery(song: SongPage, input: { provider: "tiktok" | "meta" | "google_analytics"; providerEventName: string; internalEventType: string; eventId?: string | null; pixelId?: string | null; testEvent?: boolean }) {
   if (!input.pixelId) return;
   const payload = {
     songSlug: song.slug,
@@ -33,6 +33,7 @@ function sendPixelDelivery(song: SongPage, input: { provider: "tiktok" | "meta" 
     artistId: song.artistId,
     provider: input.provider,
     providerEventName: input.providerEventName,
+    internalEventType: input.internalEventType,
     eventId: input.eventId,
     pixelId: input.pixelId,
     status: "sent",
@@ -73,11 +74,11 @@ export function trackView(song: SongPage, identity?: VisitorIdentityPayload) {
   };
   if (new URLSearchParams(window.location.search).get("debugPixel") === "1") console.log("ttq exists:", Boolean(window.ttq), "tracking ViewContent:", payload);
   trackTikTok("ViewContent", payload);
-  sendPixelDelivery(song, { provider: "tiktok", providerEventName: "ViewContent", eventId: identity?.event_id, pixelId: song.trackingPixels?.tiktokPixelId, testEvent: Boolean(getTikTokTestCode()) });
+  sendPixelDelivery(song, { provider: "tiktok", providerEventName: "ViewContent", internalEventType: "view_content", eventId: identity?.event_id, pixelId: song.trackingPixels?.tiktokPixelId, testEvent: Boolean(getTikTokTestCode()) });
   window.fbq?.("track", "ViewContent", { content_ids: [song.pixelEvents.contentId], content_name: song.pixelEvents.contentName, event_id: identity?.event_id, fbp: identity?.fbp, fbc: identity?.fbc }, identity?.event_id ? { eventID: identity.event_id } : undefined);
-  sendPixelDelivery(song, { provider: "meta", providerEventName: "ViewContent", eventId: identity?.event_id, pixelId: song.trackingPixels?.metaPixelId });
+  sendPixelDelivery(song, { provider: "meta", providerEventName: "ViewContent", internalEventType: "view_content", eventId: identity?.event_id, pixelId: song.trackingPixels?.metaPixelId });
   window.gtag?.("event", "view_item", { song_slug: song.slug, song_title: song.title, artist: song.artist, event_id: identity?.event_id, session_id: identity?.session_id });
-  sendPixelDelivery(song, { provider: "google_analytics", providerEventName: "view_item", eventId: identity?.event_id, pixelId: song.trackingPixels?.gaMeasurementId });
+  sendPixelDelivery(song, { provider: "google_analytics", providerEventName: "view_item", internalEventType: "view_content", eventId: identity?.event_id, pixelId: song.trackingPixels?.gaMeasurementId });
 }
 
 export function trackPlatformClick(song: SongPage, link: SongLink, identity?: VisitorIdentityPayload) {
@@ -102,11 +103,11 @@ export function trackPlatformClick(song: SongPage, link: SongLink, identity?: Vi
   }
   try {
     trackTikTok("ClickButton", payload);
-    sendPixelDelivery(song, { provider: "tiktok", providerEventName: "ClickButton", eventId: identity?.event_id, pixelId: song.trackingPixels?.tiktokPixelId, testEvent: Boolean(getTikTokTestCode()) });
+    sendPixelDelivery(song, { provider: "tiktok", providerEventName: "ClickButton", internalEventType: "platform_click", eventId: identity?.event_id, pixelId: song.trackingPixels?.tiktokPixelId, testEvent: Boolean(getTikTokTestCode()) });
     window.fbq?.("trackCustom", "MusicPlatformClick", { ...payload, fbp: identity?.fbp, fbc: identity?.fbc }, identity?.event_id ? { eventID: identity.event_id } : undefined);
-    sendPixelDelivery(song, { provider: "meta", providerEventName: "MusicPlatformClick", eventId: identity?.event_id, pixelId: song.trackingPixels?.metaPixelId });
+    sendPixelDelivery(song, { provider: "meta", providerEventName: "MusicPlatformClick", internalEventType: "platform_click", eventId: identity?.event_id, pixelId: song.trackingPixels?.metaPixelId });
     window.gtag?.("event", "music_platform_click", payload);
-    sendPixelDelivery(song, { provider: "google_analytics", providerEventName: "music_platform_click", eventId: identity?.event_id, pixelId: song.trackingPixels?.gaMeasurementId });
+    sendPixelDelivery(song, { provider: "google_analytics", providerEventName: "music_platform_click", internalEventType: "platform_click", eventId: identity?.event_id, pixelId: song.trackingPixels?.gaMeasurementId });
   } catch (error) { console.warn("Pixel tracking failed", error); }
   return payload;
 }
@@ -127,10 +128,10 @@ export function trackUtility(song: SongPage, label: "Copy URL" | "Share" | "Embe
   if (new URLSearchParams(window.location.search).get("debugPixel") === "1") console.log(`tracking ${action}:`, payload);
   try {
     trackTikTok("ClickButton", payload);
-    sendPixelDelivery(song, { provider: "tiktok", providerEventName: "ClickButton", eventId: identity?.event_id, pixelId: song.trackingPixels?.tiktokPixelId, testEvent: Boolean(getTikTokTestCode()) });
+    sendPixelDelivery(song, { provider: "tiktok", providerEventName: "ClickButton", internalEventType: action, eventId: identity?.event_id, pixelId: song.trackingPixels?.tiktokPixelId, testEvent: Boolean(getTikTokTestCode()) });
     window.fbq?.("trackCustom", "SmartLinkUtilityClick", { ...payload, fbp: identity?.fbp, fbc: identity?.fbc }, identity?.event_id ? { eventID: identity.event_id } : undefined);
-    sendPixelDelivery(song, { provider: "meta", providerEventName: "SmartLinkUtilityClick", eventId: identity?.event_id, pixelId: song.trackingPixels?.metaPixelId });
+    sendPixelDelivery(song, { provider: "meta", providerEventName: "SmartLinkUtilityClick", internalEventType: action, eventId: identity?.event_id, pixelId: song.trackingPixels?.metaPixelId });
     window.gtag?.("event", "smart_link_utility_click", payload);
-    sendPixelDelivery(song, { provider: "google_analytics", providerEventName: "smart_link_utility_click", eventId: identity?.event_id, pixelId: song.trackingPixels?.gaMeasurementId });
+    sendPixelDelivery(song, { provider: "google_analytics", providerEventName: "smart_link_utility_click", internalEventType: action, eventId: identity?.event_id, pixelId: song.trackingPixels?.gaMeasurementId });
   } catch (error) { console.warn("Pixel tracking failed", error); }
 }

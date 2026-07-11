@@ -214,5 +214,5 @@ export default async function PixelsPage({ params }: { params: Promise<{ workspa
     .slice(0, 6)
     .map(([eventType, count]) => ({ eventType, count, changeLabel: count ? "Active" : "—" }));
 
-  return <PixelsDashboard rows={rows} events={eventSummaries} series={buildSeries(deliveryRows, since)} canUseAdvancedPixels={entitlements.features.advanced_pixels || entitlements.developer} />;
+  return <PixelsDashboard workspaceId={workspaceId} rows={rows} events={eventSummaries} series={buildSeries(deliveryRows, since)} canUseAdvancedPixels={entitlements.features.advanced_pixels || entitlements.developer} />;
 }

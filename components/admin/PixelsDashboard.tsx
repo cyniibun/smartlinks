@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FiActivity, FiBarChart2, FiClock, FiPlus, FiSettings, FiShare2, FiTrash2 } from "react-icons/fi";
 
 export type PixelProvider = "all" | "meta" | "tiktok" | "google_analytics" | "google_ads" | "snapchat" | "custom" | "verification";
@@ -30,6 +30,7 @@ export type PixelProviderRow = {
 
 export type PixelEventSummary = { eventType: string; count: number; changeLabel?: string };
 export type PixelSeriesPoint = { label: string; count: number };
+type PixelDeliveryEvent = { id: string; provider: string; providerName: string; connectionName: string; providerEventName: string; internalEventType: string; status: string; attemptedAt: string; releaseTitle?: string | null; artistName?: string | null; testEvent?: boolean; latencyMs?: number | null; errorReason?: string | null };
 
 const tabs: Array<{ id: PixelProvider; label: string }> = [
   { id: "all", label: "All Pixels" },
@@ -139,6 +140,40 @@ function TopEvents({ events }: { events: PixelEventSummary[] }) {
   </div>)}</div>;
 }
 
+function DeliveryStatus({ status }: { status: string }) {
+  const normalized = status.toLowerCase();
+  return <span className={`delivery-status delivery-${normalized}`}>{displayEventType(status)}</span>;
+}
+
+function PixelDeliveryDrawer({ workspaceId, onClose }: { workspaceId?: string; onClose: () => void }) {
+  const [events, setEvents] = useState<PixelDeliveryEvent[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ provider: "", connectionId: "", status: "", eventType: "" });
+
+  const load = (nextPage = page) => {
+    if (!workspaceId) return;
+    const q = new URLSearchParams({ workspaceId, page: String(nextPage), pageSize: "50" });
+    Object.entries(filters).forEach(([key, value]) => { if (value) q.set(key, value); });
+    setLoading(true);
+    fetch(`/api/admin/pixel-deliveries?${q}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error(`Delivery log failed (${response.status})`)))
+      .then((payload) => { setEvents(Array.isArray(payload.events) ? payload.events : []); setHasMore(Boolean(payload.hasMore)); setPage(nextPage); })
+      .catch(() => { setEvents([]); setHasMore(false); })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(1); }, [workspaceId, filters.provider, filters.connectionId, filters.status, filters.eventType]);
+
+  return <div className="pixel-drawer-backdrop" onClick={onClose}><div onClick={(event) => event.stopPropagation()}><aside className="pixel-provider-panel pixel-events-drawer">
+    <div className="pixel-provider-head"><div className="pixel-provider-icon provider-custom">⌁</div><div><h2>Pixel delivery events</h2><p>Sent, acknowledged, failed, queued, and skipped provider dispatches.</p></div><button onClick={onClose} aria-label="Close delivery events">×</button></div>
+    <div className="pixel-event-filters"><select value={filters.provider} onChange={(event) => setFilters((current) => ({ ...current, provider: event.target.value }))}><option value="">All providers</option><option value="meta">Meta</option><option value="tiktok">TikTok</option><option value="google_analytics">Google Analytics</option><option value="google_ads">Google Ads</option><option value="snapchat">Snapchat</option><option value="custom">Custom</option></select><select value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}><option value="">All statuses</option><option value="sent">Sent</option><option value="acknowledged">Acknowledged</option><option value="failed">Failed</option><option value="queued">Queued</option><option value="skipped">Skipped</option></select><input placeholder="Event type" value={filters.eventType} onChange={(event) => setFilters((current) => ({ ...current, eventType: event.target.value }))} /></div>
+    {loading ? <div className="pixel-delivery-list">{Array.from({ length: 8 }).map((_, index) => <span className="skeleton skeleton-line" key={index} />)}</div> : events.length ? <div className="pixel-delivery-list">{events.map((event) => <article key={event.id}><div><strong>{event.providerName}</strong><small>{event.connectionName}</small></div><div><strong>{displayEventType(event.providerEventName)}</strong><small>{displayEventType(event.internalEventType)} · {event.releaseTitle || "No release attached"}{event.artistName ? ` · ${event.artistName}` : ""}</small></div><DeliveryStatus status={event.status} /><time>{formatDate(event.attemptedAt)}</time><small>{event.testEvent ? "Test event" : "Live event"}{event.latencyMs ? ` · ${event.latencyMs}ms` : ""}</small>{event.errorReason && <p>{event.errorReason}</p>}</article>)}</div> : <div className="analytics-empty"><strong>No pixel delivery events found.</strong><p>Provider dispatch attempts will appear here after public smart-link traffic fires configured pixels.</p></div>}
+    <div className="pagination-row compact"><button disabled={page <= 1 || loading} onClick={() => load(page - 1)}>Previous</button><span>Page {page}</span><button disabled={!hasMore || loading} onClick={() => load(page + 1)}>Next</button></div>
+  </aside></div></div>;
+}
+
 function ProviderPanel({ row, onClose }: { row: PixelProviderRow; onClose: () => void }) {
   const [tab, setTab] = useState<"Overview" | "Configuration" | "Diagnostics" | "Events">("Overview");
   return <aside className="pixel-provider-panel">
@@ -152,9 +187,10 @@ function ProviderPanel({ row, onClose }: { row: PixelProviderRow; onClose: () =>
   </aside>;
 }
 
-export function PixelsDashboard({ rows, events, series, canUseAdvancedPixels = false }: { rows: PixelProviderRow[]; events: PixelEventSummary[]; series: PixelSeriesPoint[]; canUseAdvancedPixels?: boolean }) {
+export function PixelsDashboard({ rows, events, series, canUseAdvancedPixels = false, workspaceId }: { rows: PixelProviderRow[]; events: PixelEventSummary[]; series: PixelSeriesPoint[]; canUseAdvancedPixels?: boolean; workspaceId?: string }) {
   const [activeTab, setActiveTab] = useState<PixelProvider>("all");
   const [selectedId, setSelectedId] = useState("");
+  const [showEvents, setShowEvents] = useState(false);
   const visibleTabs = useMemo(() => canUseAdvancedPixels ? tabs : tabs.filter((tab) => tab.id !== "snapchat" && tab.id !== "custom"), [canUseAdvancedPixels]);
   const filteredRows = useMemo(() => activeTab === "all" || activeTab === "verification" ? rows : rows.filter((row) => row.provider === activeTab), [activeTab, rows]);
   const selected = rows.find((row) => row.id === selectedId) || null;
@@ -170,8 +206,9 @@ export function PixelsDashboard({ rows, events, series, canUseAdvancedPixels = f
     <nav className="pixels-tabs">{visibleTabs.map((tab) => <button key={tab.id} className={activeTab === tab.id ? "active" : ""} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}</nav>
     {activeTab === "verification" ? <section className="admin-panel pixels-verification"><div className="panel-title"><div><h2>Verification</h2><p className="muted">Primary diagnostics for event receiving, provider credentials, and future Conversions API readiness.</p></div></div>{rows.map((row) => <article key={row.id}><PixelIcon provider={row.provider} /><div><strong>{row.providerName}</strong><p>{row.diagnostics[0]}</p></div><StatusPill status={row.status} /><HealthDot health={row.health} /><span>{formatDate(row.lastEventAt)}</span></article>)}</section> : <div className="pixels-v2-layout">
       <section className="admin-panel pixels-table-panel"><div className="pixels-toolbar"><label><span>Search pixels</span><input placeholder="Search pixels..." readOnly /></label><button><FiBarChart2 /> Filters</button><select defaultValue="all"><option value="all">All Status</option><option value="verified">Verified</option><option value="pending">Pending</option><option value="error">Error</option></select></div><div className="pixels-table"><div className="pixels-row header"><span>Provider</span><span>Status</span><span>Events (7d)</span><span>Last Event</span><span>Health</span><span>Actions</span></div>{filteredRows.map((row) => <button className="pixels-row" key={row.id} onClick={() => setSelectedId(row.id)}><span className="pixel-provider-cell"><PixelIcon provider={row.provider} /><span><strong>{row.providerName}</strong><small>{row.configuredId ? `ID: ${row.configuredId}` : "Not configured"}</small></span></span><StatusPill status={row.status} /><span><strong>{formatCount(row.events)}</strong><small>{row.events ? "Receiving events" : "No recent events"}</small></span><span>{formatDate(row.lastEventAt)}</span><HealthDot health={row.health} /><span className="pixel-actions"><i title="Open diagnostics"><FiActivity /></i><i title="Configure"><FiSettings /></i><i title="Delete"><FiTrash2 /></i></span></button>)}</div><p className="muted pixel-table-foot">Showing {filteredRows.length} of {rows.length} pixel providers</p></section>
-      <aside className="pixels-side-stack"><section className="admin-panel"><div className="panel-title"><h2>Events Over Time</h2><select defaultValue="7d"><option value="7d">Last 7 days</option></select></div><EventsArea series={series} /></section><section className="admin-panel"><div className="panel-title"><h2>Pixel Health</h2></div><HealthDonut rows={rows} /></section><section className="admin-panel"><div className="panel-title"><h2>Top Events</h2><button>View all events</button></div><TopEvents events={events} /></section></aside>
+      <aside className="pixels-side-stack"><section className="admin-panel"><div className="panel-title"><h2>Events Over Time</h2><select defaultValue="7d"><option value="7d">Last 7 days</option></select></div><EventsArea series={series} /></section><section className="admin-panel"><div className="panel-title"><h2>Pixel Health</h2></div><HealthDonut rows={rows} /></section><section className="admin-panel"><div className="panel-title"><h2>Top Events</h2><button type="button" onClick={() => setShowEvents(true)}>View all events</button></div><TopEvents events={events} /></section></aside>
     </div>}
     {selected && <div className="pixel-drawer-backdrop" onClick={() => setSelectedId("")}><div onClick={(event) => event.stopPropagation()}><ProviderPanel row={selected} onClose={() => setSelectedId("")} /></div></div>}
+    {showEvents && <PixelDeliveryDrawer workspaceId={workspaceId} onClose={() => setShowEvents(false)} />}
   </main>;
 }

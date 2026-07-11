@@ -2,9 +2,13 @@ create table if not exists public.pixel_event_deliveries (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   pixel_connection_id uuid references public.workspace_pixel_configurations(id) on delete set null,
+  link_page_id uuid references public.link_pages(id) on delete set null,
+  release_id uuid references public.releases(id) on delete set null,
+  artist_id uuid references public.artists(id) on delete set null,
   provider text not null check (provider in ('meta','tiktok','google_analytics','google_ads','snapchat','custom')),
   pixel_id text,
   internal_event_id uuid references public.click_events(id) on delete set null,
+  internal_event_type text,
   provider_event_name text not null,
   event_id text,
   dedupe_key text not null unique,
@@ -30,6 +34,12 @@ on public.pixel_event_deliveries(pixel_connection_id, attempted_at desc);
 
 create index if not exists pixel_event_deliveries_status_idx
 on public.pixel_event_deliveries(workspace_id, status, attempted_at desc);
+
+create index if not exists pixel_event_deliveries_link_page_idx
+on public.pixel_event_deliveries(workspace_id, link_page_id, attempted_at desc);
+
+create index if not exists pixel_event_deliveries_release_idx
+on public.pixel_event_deliveries(workspace_id, release_id, attempted_at desc);
 
 create table if not exists public.pixel_connection_test_sessions (
   id uuid primary key default gen_random_uuid(),
