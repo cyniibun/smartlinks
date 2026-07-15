@@ -98,7 +98,7 @@ function Sparkline({ data }: { data: Point[] }) {
 }
 
 function KpiCard({ label, value, caption, data, icon }: { label: string; value: string; caption: string; data: Point[]; icon: ReactNode }) {
-  return <article className="analytics-kpi-card"><span>{label}</span><i className="analytics-kpi-icon" aria-hidden="true">{icon}</i><strong>{value}</strong><small>{caption}</small><Sparkline data={data} /></article>;
+  return <article className="analytics-kpi-card"><span>{label}</span><div className="analytics-kpi-icon" aria-hidden="true">{icon}</div><strong>{value}</strong><small>{caption}</small><Sparkline data={data} /></article>;
 }
 
 function percent(count: number, total: number) {
