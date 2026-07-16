@@ -40,9 +40,9 @@ function RecentSkeleton() {
   return <section className="admin-panel" id="recent-events"><div className="panel-title"><div><h2>Recent events</h2><p className="muted">Loading event log…</p></div><Spinner /></div><div className="recent-table analytics-recent">{Array.from({ length: 6 }).map((_, i) => <div key={i}>{Array.from({ length: 9 }).map((__, j) => <span className="skeleton skeleton-line" key={j} />)}</div>)}</div></section>;
 }
 
-function Bars({ title, data, emptyLabel = "No data yet" }: { title: string; data: Metric[]; emptyLabel?: string }) {
+function Bars({ title, data, emptyLabel = "No data yet", formatName = (name: string) => name }: { title: string; data: Metric[]; emptyLabel?: string; formatName?: (name: string) => string }) {
   const max = Math.max(...data.map((i) => i.count), 1);
-  return <section className="admin-panel metric-panel"><h2>{title}</h2>{data.length ? <div className="bar-list">{data.slice(0, 10).map((i) => <div className="bar-item" key={i.name}><div><span>{i.name}</span><strong>{i.count}</strong></div><i style={{ width: `${i.count / max * 100}%` }} /></div>)}</div> : <div className="analytics-empty"><strong>{emptyLabel}</strong><p>Once matching tracking events are recorded, this card will show the top results for the selected filters.</p></div>}</section>;
+  return <section className="admin-panel metric-panel"><h2>{title}</h2>{data.length ? <div className="bar-list">{data.slice(0, 10).map((i) => <div className="bar-item" key={i.name}><div><span>{formatName(i.name)}</span><strong>{i.count}</strong></div><i style={{ width: `${i.count / max * 100}%` }} /></div>)}</div> : <div className="analytics-empty"><strong>{emptyLabel}</strong><p>Once matching tracking events are recorded, this card will show the top results for the selected filters.</p></div>}</section>;
 }
 
 function formatCount(value: number) {
@@ -262,7 +262,7 @@ export function AnalyticsDashboard({ workspaceId, artistId = "", releaseId = "",
       case "Campaigns":
         return <div className="analytics-grid analytics-v2-grid"><Bars title="UTM Campaigns" data={data.campaigns} emptyLabel="No UTM campaigns yet" /><Bars title="UTM Sources" data={data.utmSources} emptyLabel="No UTM sources yet" /><DonutCard title="Campaign Platform Mix" data={data.byPlatform} emptyLabel="No campaign platform data yet" /><TimeSeriesChart data={data.timeSeries} workspaceId={workspaceId} loaded={loaded} /></div>;
       case "Platforms":
-        return <div className="analytics-grid analytics-v2-grid"><DonutCard title="Top Platforms" data={data.byPlatform} emptyLabel="No platform clicks yet" /><Bars title="Platform Clicks" data={data.byPlatform} emptyLabel="No platform clicks yet" /><TimeSeriesChart data={data.timeSeries} workspaceId={workspaceId} loaded={loaded} /></div>;
+        return <div className="analytics-grid analytics-v2-grid"><DonutCard title="Top Platforms" data={data.byPlatform} emptyLabel="No platform clicks yet" /><Bars title="Platform Clicks" data={data.byPlatform} emptyLabel="No platform clicks yet" formatName={(name)=>displayPlatformName(name,name)} /><TimeSeriesChart data={data.timeSeries} workspaceId={workspaceId} loaded={loaded} /></div>;
       case "Referrers":
         return <div className="analytics-grid analytics-v2-grid"><Bars title="Top Referrers" data={data.referrers.map((item) => ({ ...item, name: item.name || "Direct" }))} emptyLabel="No referrers yet" /><Bars title="UTM Sources" data={data.utmSources} emptyLabel="No UTM sources yet" /><Bars title="UTM Campaigns" data={data.campaigns} emptyLabel="No UTM campaigns yet" /></div>;
       case "Events":
