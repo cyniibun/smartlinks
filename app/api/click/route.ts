@@ -8,6 +8,12 @@ function nullableString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function boundedDuration(value: unknown) {
+  const duration = Number(value);
+  if (!Number.isFinite(duration)) return 0;
+  return Math.min(Math.max(Math.round(duration), 0), 86_400_000);
+}
+
 export async function POST(request: Request) {
   try {
     const event = await request.json();
@@ -24,8 +30,34 @@ export async function POST(request: Request) {
       const utmContent = normalizeUtmValue(event.utmContent);
       const utmTerm = normalizeUtmValue(event.utmTerm);
       const clickIds = event.clickIds && typeof event.clickIds === "object" ? event.clickIds : {};
+      const workspaceId = page?.data?.workspace_id ?? song?.data?.workspace_id ?? event.workspaceId ?? null;
+      if (event.eventType === "page_engagement") {
+        const pageViewId = nullableString(event.pageViewId ?? event.page_view_id);
+        if ((!page?.data && !song?.data) || !workspaceId || !pageViewId) return NextResponse.json({ ok: false, error: "Page engagement requires a valid published page view." }, { status: 400 });
+        const { error } = await supabase.rpc("record_page_engagement", {
+          p_workspace_id: workspaceId,
+          p_song_id: song?.data?.id ?? null,
+          p_link_page_id: page?.data?.id ?? event.linkPageId ?? null,
+          p_release_id: page?.data?.release_id ?? event.releaseId ?? null,
+          p_artist_id: page?.data?.artist_id ?? event.artistId ?? null,
+          p_visitor_id: nullableString(event.visitorId ?? event.visitor_id),
+          p_session_id: nullableString(event.sessionId ?? event.session_id),
+          p_page_view_id: pageViewId,
+          p_event_id: nullableString(event.eventId ?? event.event_id),
+          p_active_duration_ms: boundedDuration(event.activeDurationMs ?? event.active_duration_ms),
+          p_completed: Boolean(event.engagementCompleted ?? event.engagement_completed),
+          p_utm_source: utmSource,
+          p_utm_medium: utmMedium,
+          p_utm_campaign: utmCampaign,
+          p_referrer: nullableString(event.referrer),
+          p_user_agent: nullableString(event.userAgent ?? request.headers.get("user-agent")),
+          p_device_type: /mobile|android|iphone/i.test(event.userAgent || request.headers.get("user-agent") || "") ? "mobile" : "desktop"
+        });
+        if (error) throw error;
+        return NextResponse.json({ ok: true }, { status: 202 });
+      }
       const { error } = await supabase.from("click_events").insert({
-        song_id: song?.data?.id ?? null, workspace_id: page?.data?.workspace_id ?? song?.data?.workspace_id ?? event.workspaceId ?? null,
+        song_id: song?.data?.id ?? null, workspace_id: workspaceId,
         link_page_id: page?.data?.id ?? event.linkPageId ?? null, release_id: page?.data?.release_id ?? event.releaseId ?? null,
         artist_id: page?.data?.artist_id ?? event.artistId ?? null, campaign_id: event.campaignId || null,
         event_type: event.eventType || "click", event_name: event.eventName || null,

@@ -8,7 +8,8 @@ export type VisitorBehaviorMetrics = {
   returningVisitors: number | null;
   repeatClickers: number | null;
   medianTimeToClickSeconds: number | null;
-  engagementRate: number | null;
+  averageActiveViewSeconds: number | null;
+  activeViewSamples: number;
   visitorIdentityEvents: number;
   available: boolean;
 };
@@ -19,7 +20,8 @@ const emptyMetrics: VisitorBehaviorMetrics = {
   returningVisitors: null,
   repeatClickers: null,
   medianTimeToClickSeconds: null,
-  engagementRate: null,
+  averageActiveViewSeconds: null,
+  activeViewSamples: 0,
   visitorIdentityEvents: 0,
   available: false,
 };
@@ -54,9 +56,9 @@ export async function getVisitorBehaviorMetrics(db: SupabaseLike, filters: Analy
     returningVisitors: row.returning_visitors === null || row.returning_visitors === undefined ? null : Number(row.returning_visitors),
     repeatClickers: row.repeat_clickers === null || row.repeat_clickers === undefined ? null : Number(row.repeat_clickers),
     medianTimeToClickSeconds: row.median_time_to_click_seconds === null || row.median_time_to_click_seconds === undefined ? null : Number(row.median_time_to_click_seconds),
-    engagementRate: row.engagement_rate === null || row.engagement_rate === undefined ? null : Number(row.engagement_rate),
+    averageActiveViewSeconds: row.average_active_view_seconds === null || row.average_active_view_seconds === undefined ? null : Number(row.average_active_view_seconds),
+    activeViewSamples: Number(row.active_view_samples || 0),
     visitorIdentityEvents,
     available: visitorIdentityEvents > 0,
   };
 }
-

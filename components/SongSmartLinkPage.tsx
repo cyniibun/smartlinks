@@ -18,7 +18,7 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
   const [embedOpen, setEmbedOpen] = useState(false);
   const links = useMemo(() => song.links.filter((link) => link.enabled).sort((a, b) => a.order - b.order), [song.links]);
 
-  const sendInternalEvent = (eventType: string, identity: VisitorIdentityPayload = getVisitorIdentity()) => {
+  const sendInternalEvent = (eventType: string, identity: VisitorIdentityPayload = getVisitorIdentity(), details: Record<string, unknown> = {}) => {
     const payload = JSON.stringify({ eventType, songSlug: song.slug, workspaceId: song.workspaceId, artistId: song.artistId,
       releaseId: song.releaseId, linkPageId: song.linkPageId, referrer: document.referrer, userAgent: navigator.userAgent,
       visitorId: identity.visitor_id, externalId: identity.external_id, sessionId: identity.session_id,
@@ -26,16 +26,51 @@ export function SongSmartLinkPage({ song }: { song: SongPage }) {
       msclkid: identity.msclkid, twclid: identity.twclid, liFatId: identity.li_fat_id,
       utmSource: identity.utm_source, utmMedium: identity.utm_medium, utmCampaign: identity.utm_campaign,
       utmContent: identity.utm_content, utmTerm: identity.utm_term, normalizedReferrer: identity.normalized_referrer,
-      marketingCookies: identity.marketing_cookies, eventId: identity.event_id, eventTimestamp: identity.event_timestamp });
-    if (navigator.sendBeacon) navigator.sendBeacon("/api/events", new Blob([payload], { type: "application/json" }));
-    else void fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: payload, keepalive: true });
+      marketingCookies: identity.marketing_cookies, eventId: identity.event_id, eventTimestamp: identity.event_timestamp,
+      ...details });
+    const queued = navigator.sendBeacon?.("/api/events", new Blob([payload], { type: "application/json" })) ?? false;
+    if (!queued) void fetch("/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: payload, keepalive: true });
   };
 
   useEffect(() => {
     const viewIdentity = getVisitorIdentity();
+    const engagementIdentity = { ...viewIdentity, event_id: `engagement_${viewIdentity.event_id}` };
+    const pageViewId = viewIdentity.event_id;
+    let activeDurationMs = 0;
+    let activeSince = document.visibilityState === "visible" ? performance.now() : null;
+    let lastReportedDurationMs = -1;
+
+    const accumulateActiveTime = () => {
+      if (activeSince === null) return;
+      activeDurationMs += Math.max(performance.now() - activeSince, 0);
+      activeSince = null;
+    };
+    const reportActiveTime = (completed: boolean) => {
+      accumulateActiveTime();
+      const roundedDurationMs = Math.max(Math.round(activeDurationMs), 0);
+      if (roundedDurationMs === lastReportedDurationMs || (!completed && roundedDurationMs < 250)) return;
+      sendInternalEvent("page_engagement", engagementIdentity, { pageViewId, activeDurationMs: roundedDurationMs, engagementCompleted: completed });
+      lastReportedDurationMs = roundedDurationMs;
+      if (!completed && document.visibilityState === "visible") activeSince = performance.now();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") reportActiveTime(false);
+      else if (activeSince === null) activeSince = performance.now();
+    };
+    const handlePageHide = () => reportActiveTime(true);
+
     trackView(song, viewIdentity);
     sendInternalEvent("page_view", viewIdentity); sendInternalEvent("view_content");
-    // sendInternalEvent only depends on the immutable song prop for this page load.
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", handlePageHide);
+    const checkpoint = window.setInterval(() => reportActiveTime(false), 15_000);
+    return () => {
+      window.clearInterval(checkpoint);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handlePageHide);
+      reportActiveTime(true);
+    };
+    // This measurement belongs to one immutable public-page impression.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [song]);
 
