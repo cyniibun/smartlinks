@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { canManage, getWorkspaceContext } from "@/lib/adminAuth";
+import { getWorkspaceContext } from "@/lib/adminAuth";
 import { genericApiError } from "@/lib/apiSecurity";
-import { listSongs, saveSong } from "@/lib/songRepository";
+import { listSongs } from "@/lib/songRepository";
 
 export async function GET() {
   const context = await getWorkspaceContext();
@@ -11,8 +11,6 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const context = await getWorkspaceContext();
-  if (!context || !canManage(context.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  try { return NextResponse.json({ song: await saveSong(await request.json(), context.workspace.id) }); }
-  catch (error) { return genericApiError("songs:save:error", error, { workspaceId: context.workspace.id }, 400, "Unable to save song."); }
+  void request;
+  return NextResponse.json({ error: "The legacy song writer has been retired. Create releases through the current Create / Search workflow." }, { status: 410 });
 }

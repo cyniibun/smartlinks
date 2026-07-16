@@ -7,6 +7,15 @@ import { minimalDarkTheme, resolveThemeSettings, systemThemes } from "@/lib/them
 
 const slug = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "theme";
 
+async function getAccessibleTheme(db: NonNullable<ReturnType<typeof getSupabaseAdmin>>, themeId: string, workspaceId: string) {
+  const result = await db.from("themes").select("*").eq("id", themeId).maybeSingle();
+  if (result.error) throw result.error;
+  const theme = result.data || systemThemes.find((item) => item.id === themeId) || null;
+  if (!theme) return null;
+  if (!theme.is_system_theme && theme.workspace_id !== workspaceId) return null;
+  return theme;
+}
+
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const context = await getWorkspaceContext(params.get("workspaceId") || undefined);
@@ -40,10 +49,11 @@ export async function POST(request: Request) {
 
   let source: any | null = null;
   if (body.sourceThemeId) {
-    const sourceResult = await db.from("themes").select("*").eq("id", body.sourceThemeId).maybeSingle();
-    if (sourceResult.error) return genericApiError("themes:source:error", sourceResult.error, { workspaceId: context.workspace.id, sourceThemeId: body.sourceThemeId }, 400, "Unable to create theme.");
-    source = sourceResult.data as any | null;
-    if (!source) source = systemThemes.find(theme => theme.id === body.sourceThemeId);
+    try {
+      source = await getAccessibleTheme(db, String(body.sourceThemeId), context.workspace.id);
+    } catch (error) {
+      return genericApiError("themes:source:error", error, { workspaceId: context.workspace.id, sourceThemeId: body.sourceThemeId }, 400, "Unable to create theme.");
+    }
     if (!source) return NextResponse.json({ error: "Theme not found." }, { status: 404 });
   }
 
@@ -75,6 +85,11 @@ export async function PATCH(request: Request) {
   if (body.action === "set_release_default" || body.action === "set_workspace_default") {
     if (!canAdmin(context.role)) return NextResponse.json({ error: "Only owners, admins, and developers can set release defaults." }, { status: 403 });
     const themeId = String(body.themeId || "minimal-dark");
+    let theme;
+    try { theme = await getAccessibleTheme(db, themeId, context.workspace.id); }
+    catch (error) { return genericApiError("themes:set-release-default:lookup-error", error, { workspaceId: context.workspace.id, themeId }, 400, "Unable to validate theme."); }
+    if (!theme) return NextResponse.json({ error: "Theme not found for this workspace." }, { status: 404 });
+    if (!theme.is_system_theme && !entitlements.features.custom_themes) return NextResponse.json({ error: "Custom themes are available on Pro." }, { status: 403 });
     const updated = await db
       .from("workspaces")
       .update({ release_default_theme_id: themeId, default_theme_id: themeId, default_theme: themeId, updated_at: new Date().toISOString() })
@@ -89,6 +104,11 @@ export async function PATCH(request: Request) {
   if (body.action === "set_workspace_display") {
     if (!canAdmin(context.role)) return NextResponse.json({ error: "Only owners, admins, and developers can set workspace display themes." }, { status: 403 });
     const themeId = String(body.themeId || "tonelink");
+    let theme;
+    try { theme = await getAccessibleTheme(db, themeId, context.workspace.id); }
+    catch (error) { return genericApiError("themes:set-workspace-display:lookup-error", error, { workspaceId: context.workspace.id, themeId }, 400, "Unable to validate theme."); }
+    if (!theme) return NextResponse.json({ error: "Theme not found for this workspace." }, { status: 404 });
+    if (!theme.is_system_theme && !entitlements.features.custom_themes) return NextResponse.json({ error: "Custom themes are available on Pro." }, { status: 403 });
     const updated = await db
       .from("workspaces")
       .update({ workspace_display_theme_id: themeId, updated_at: new Date().toISOString() })

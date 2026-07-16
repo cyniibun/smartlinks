@@ -63,6 +63,7 @@ export async function PATCH(request: Request) {
   const body = await request.json();
   const context = await getWorkspaceContext(body.workspaceId);
   if (!context || !canAdmin(context.role)) return NextResponse.json({ error: "Only workspace owners, admins, and developers can verify domains." }, { status: 403 });
+  if (!(await hasFeature(context.workspace.id, "custom_domains", context.user, context.role))) return NextResponse.json({ error: "Custom domains are available on Pro." }, { status: 403 });
   const db = getSupabaseAdmin();
   if (!db) return NextResponse.json({ error: "Supabase unavailable." }, { status: 500 });
   const existing = await db.from("workspace_domains").select("*").eq("id", String(body.domainId || "")).eq("workspace_id", context.workspace.id).maybeSingle();

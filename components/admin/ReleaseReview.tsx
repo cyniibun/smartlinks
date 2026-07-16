@@ -12,7 +12,6 @@ type Artist = { id: string; name: string; default_label_name?:string; default_sl
 type Candidate = { provider:string; title:string; artist:string; artworkUrl?:string; releaseDate?:string; isrc?:string; album?:string; labelName?:string; copyright?:string; appleMusicUrl?:string; iTunesUrl?:string; links:Array<{platform:string;label:string;url:string;section:string}> };
 type StoredImport = { candidate: Candidate; query: string };
 type EditableLink = ResolvedLink & { selected: boolean };
-const releaseTypes=["single","album","ep","playlist","podcast","podcast_episode","audiobook","youtube_video","merch","event","ticket_page","presave","artist_bio","short_link","custom"];
 const platforms=["spotify","apple_music","youtube","youtube_music","soundcloud","pandora","deezer","amazon_music","tidal","itunes","amazon","bandcamp","audiomack","other"];
 const sections=["listen","watch","buy","podcast","merch","tickets","other"];
 const slugify=(value:string)=>value.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
@@ -20,7 +19,7 @@ const applySlugPattern=(pattern:string|undefined,title:string,artist:string)=>sl
 const sortLinksByTemplate=(links:EditableLink[],order?:string[])=>{if(!order?.length)return links;const rank=new Map(order.map((platform,index)=>[platform,index]));return[...links].sort((a,b)=>(rank.get(a.platform)??999)-(rank.get(b.platform)??999))};
 const mergeReviewLinks=(current:EditableLink[],incoming:ResolvedLink[])=>{const merged=new Map(current.map(link=>[`${link.platform}:${link.section}`,link]));for(const link of incoming){const key=`${link.platform}:${link.section}`,existing=merged.get(key);if(!existing||(!existing.url&&link.url))merged.set(key,{...link,selected:link.enabledByDefault})}return[...merged.values()]};
 
-export function ReleaseReview({workspaceId,artists}:{workspaceId:string;artists:Artist[]}) {
+export function ReleaseReview({workspaceId,artists,allowedReleaseTypes,canUseCustomDestinations}:{workspaceId:string;artists:Artist[];allowedReleaseTypes:string[];canUseCustomDestinations:boolean}) {
   const router=useRouter(); const searchParams=useSearchParams();
   const [ready,setReady]=useState(false); const [busy,setBusy]=useState(false); const [status,setStatus]=useState(""); const [error,setError]=useState(""); const [errorDetail,setErrorDetail]=useState("");
   const [resolved,setResolved]=useState<ResolvedRelease|null>(null); const [sourceUrl,setSourceUrl]=useState("");
@@ -58,13 +57,13 @@ export function ReleaseReview({workspaceId,artists}:{workspaceId:string;artists:
       <label>Display artist<input value={displayArtist} onChange={event=>setDisplayArtist(event.target.value)}/></label>
       <label>Assign artist<select value={artistId} onChange={event=>{setArtistId(event.target.value);const selected=artists.find(artist=>artist.id===event.target.value);if(selected)applyArtistTemplate(selected)}}><option value="new">+ Create new artist</option>{artists.map(artist=><option key={artist.id} value={artist.id}>{artist.name}</option>)}</select></label>
       {artistId==="new"&&<label>New artist name<input value={newArtist} onChange={event=>{setNewArtist(event.target.value);setDisplayArtist(event.target.value)}}/></label>}
-      <label>Release type<select value={releaseType} onChange={event=>setReleaseType(event.target.value)}>{releaseTypes.map(type=><option key={type} value={type}>{type.replaceAll("_"," ")}</option>)}</select></label>
+      <label>Release type<select value={releaseType} onChange={event=>setReleaseType(event.target.value)}>{allowedReleaseTypes.map(type=><option key={type} value={type}>{type.replaceAll("_"," ")}</option>)}</select></label>
       <label>Release date<input type="date" value={releaseDate} onChange={event=>setReleaseDate(event.target.value)}/></label>
       <label>Slug<input value={slug} onChange={event=>setSlug(slugify(event.target.value))}/></label>
       <label>Label name<input value={labelName} onChange={event=>setLabelName(event.target.value)}/></label>
       <label className="full">Artwork URL<input value={artworkUrl} onChange={event=>setArtworkUrl(event.target.value)} title={artworkUrl}/></label>
     </div></section>
-    <section className="admin-panel"><div className="panel-title"><div><h2>Platform links</h2><p className="muted">Enable, categorize, or add any destination before publishing.</p></div><div className="review-link-actions"><button onClick={()=>void searchMissing()} disabled={busy}>{busy?"Searching…":"Search missing platforms"}</button><button onClick={addLink}>+ Add link</button></div></div><div className="platform-editor-list">{links.map((link,index)=><div className="platform-editor-row" key={`${index}-${link.source}`}>
+    <section className="admin-panel"><div className="panel-title"><div><h2>Platform links</h2><p className="muted">Enable, categorize, or add any destination before publishing.</p></div><div className="review-link-actions"><button onClick={()=>void searchMissing()} disabled={busy}>{busy?"Searching…":"Search missing platforms"}</button>{canUseCustomDestinations?<button onClick={addLink}>+ Add link</button>:null}</div></div>{!canUseCustomDestinations&&<div className="admin-alert">Custom destinations require Pro. Resolved music-platform links remain available.</div>}<div className="platform-editor-list">{links.map((link,index)=><div className="platform-editor-row" key={`${index}-${link.source}`}>
       <label className="toggle"><input type="checkbox" checked={link.selected} onChange={event=>updateLink(index,{selected:event.target.checked})}/> Enabled</label>
       <select aria-label="Platform" value={link.platform} onChange={event=>setPlatform(index,event.target.value)}>{platforms.map(platform=><option key={platform} value={platform}>{platform.replaceAll("_"," ")}</option>)}</select>
       <select aria-label="Section" value={link.section} onChange={event=>updateLink(index,{section:event.target.value as EditableLink["section"]})}>{sections.map(section=><option key={section}>{section}</option>)}</select>

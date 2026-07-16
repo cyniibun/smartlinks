@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWorkspaceContext } from "@/lib/adminAuth";
+import { getWorkspaceEntitlements } from "@/lib/entitlements";
 import { isSuccessfulPixelDelivery, type PixelDeliveryRow } from "@/lib/pixelDeliveries";
 import { pixelProviders, type WorkspacePixelConfiguration } from "@/lib/pixelConfigurations";
 import { getSupabaseAdmin } from "@/lib/supabase";
@@ -33,6 +34,8 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const context = await getWorkspaceContext(params.get("workspaceId") || undefined);
   if (!context) return json({ error: "Unauthorized" }, { status: 401 });
+  const entitlements = await getWorkspaceEntitlements(context.workspace.id, context.user, context.role);
+  if (!(entitlements.features.standard_pixels || entitlements.developer)) return json({ error: "Tracking pixels are available on Basic and Pro plans." }, { status: 403 });
   const db = getSupabaseAdmin();
   if (!db) return json({ summary: [], events: [], page: 1, hasMore: false });
 
@@ -42,6 +45,10 @@ export async function GET(request: Request) {
   const from = params.get("from");
   const to = params.get("to");
   const providerFilter = params.get("provider");
+  const canUseAdvancedPixels = entitlements.features.advanced_pixels || entitlements.developer;
+  if (providerFilter && ["snapchat", "custom"].includes(providerFilter) && !canUseAdvancedPixels) {
+    return json({ error: "Advanced pixels require Pro." }, { status: 403 });
+  }
   const connectionFilter = params.get("connectionId");
   const statusFilter = params.get("status");
   const eventNameFilter = params.get("eventType");
@@ -53,7 +60,7 @@ export async function GET(request: Request) {
     db.from("link_pages").select("id,title,artist_display_name,tiktok_pixel_id,meta_pixel_id,ga_measurement_id").eq("workspace_id", workspaceId).limit(1000),
   ]);
 
-  const configRows = (configs.data || []) as WorkspacePixelConfiguration[];
+  const configRows = ((configs.data || []) as WorkspacePixelConfiguration[]).filter((config) => canUseAdvancedPixels || !["snapchat", "custom"].includes(config.provider));
   const artistRows = artists.data || [];
   const linkRows = linkPages.data || [];
   const assignedConfigs = configRows.filter((config) => {
@@ -74,12 +81,14 @@ export async function GET(request: Request) {
   if (connectionFilter) deliveryQuery = deliveryQuery.eq("pixel_connection_id", connectionFilter);
   if (statusFilter) deliveryQuery = deliveryQuery.eq("status", statusFilter);
   if (eventNameFilter) deliveryQuery = deliveryQuery.ilike("provider_event_name", `%${eventNameFilter}%`);
+  if (!canUseAdvancedPixels) deliveryQuery = deliveryQuery.not("provider", "in", "(snapchat,custom)");
   const deliveryResult = await deliveryQuery.range(offset, offset + pageSize - 1);
   if (deliveryResult.error) return json({ error: deliveryResult.error.message }, { status: 500 });
 
   let allForSummaryQuery = db.from("pixel_event_deliveries").select("*").eq("workspace_id", workspaceId).limit(5000);
   if (from) allForSummaryQuery = allForSummaryQuery.gte("attempted_at", from);
   if (to) allForSummaryQuery = allForSummaryQuery.lte("attempted_at", to);
+  if (!canUseAdvancedPixels) allForSummaryQuery = allForSummaryQuery.not("provider", "in", "(snapchat,custom)");
   const allForSummary = await allForSummaryQuery;
   const allDeliveries = (allForSummary.data || []) as PixelDeliveryRow[];
 

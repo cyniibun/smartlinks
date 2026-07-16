@@ -22,7 +22,8 @@ export type FeatureKey =
   | "standard_pixels"
   | "advanced_pixels"
   | "header_injection"
-  | "custom_destinations";
+  | "custom_destinations"
+  | "internal_experiments";
 
 export type FeatureLimitKey =
   | "artists"
@@ -42,18 +43,45 @@ export type WorkspaceEntitlements = {
   limits: FeatureLimits;
 };
 
-const featureKeys: FeatureKey[] = ["theme_studio","custom_themes","custom_domains","advanced_analytics","analytics_export","unlimited_links","unlimited_artists","remove_branding","team_members","api_access","podcast_pages","merch_pages","event_pages","bio_pages","standard_pixels","advanced_pixels","header_injection","custom_destinations"];
+const featureKeys: FeatureKey[] = ["theme_studio","custom_themes","custom_domains","advanced_analytics","analytics_export","unlimited_links","unlimited_artists","remove_branding","team_members","api_access","podcast_pages","merch_pages","event_pages","bio_pages","standard_pixels","advanced_pixels","header_injection","custom_destinations","internal_experiments"];
+
+const proFeatures: Partial<Record<FeatureKey, boolean>> = {
+  theme_studio: true,
+  custom_themes: true,
+  custom_domains: true,
+  advanced_analytics: true,
+  analytics_export: true,
+  unlimited_links: true,
+  unlimited_artists: true,
+  remove_branding: true,
+  team_members: true,
+  podcast_pages: true,
+  merch_pages: true,
+  event_pages: true,
+  bio_pages: true,
+  standard_pixels: true,
+  advanced_pixels: true,
+  header_injection: true,
+  custom_destinations: true,
+};
+
+// Enterprise is an explicit superset of stable Pro features. New experimental
+// features remain Developer-only until they are deliberately promoted here.
+const enterpriseFeatures: Partial<Record<FeatureKey, boolean>> = {
+  ...proFeatures,
+  api_access: true,
+};
 
 const planFeatures: Record<PlanId, Partial<Record<FeatureKey, boolean>>> = {
   free: {},
   basic: { analytics_export: true, standard_pixels: true },
-  pro: { theme_studio: true, custom_themes: true, custom_domains: true, advanced_analytics: true, analytics_export: true, unlimited_links: true, unlimited_artists: true, remove_branding: true, team_members: true, podcast_pages: true, merch_pages: true, event_pages: true, bio_pages: true, standard_pixels: true, advanced_pixels: true, header_injection: true, custom_destinations: true },
-  enterprise: Object.fromEntries(featureKeys.map(key => [key, true])) as Record<FeatureKey, boolean>,
+  pro: proFeatures,
+  enterprise: enterpriseFeatures,
   developer: Object.fromEntries(featureKeys.map(key => [key, true])) as Record<FeatureKey, boolean>,
 };
 
 const planLimits: Record<PlanId, WorkspaceEntitlements["limits"]> = {
-  free: { artists: 1, smart_links: 5, custom_domains: 0, team_members: 1, analytics_retention_days: 7 },
+  free: { artists: 1, smart_links: 3, custom_domains: 0, team_members: 1, analytics_retention_days: 7 },
   basic: { artists: 5, smart_links: 50, custom_domains: 0, team_members: 3, analytics_retention_days: 90 },
   pro: { artists: null, smart_links: null, custom_domains: 1, team_members: null, analytics_retention_days: null },
   enterprise: { artists: null, smart_links: null, custom_domains: null, team_members: null, analytics_retention_days: null },
@@ -97,11 +125,26 @@ export async function getWorkspaceEntitlements(workspaceId: string, user?: Pick<
     const status = String(subscription.data.status || "active");
     const periodEnd = subscription.data.current_period_ends_at ? new Date(subscription.data.current_period_ends_at).getTime() : null;
     const periodValid = periodEnd === null || periodEnd > Date.now();
-    return entitlementsForPlan(isPaidSubscriptionStatus(status) && periodValid ? normalizePlan(subscription.data.plan) : "free", status, true, false);
+    const subscribedPlan = normalizePlan(subscription.data.plan);
+    // Developer access is granted only by a trusted membership/environment
+    // identity above, never by changing a subscription plan value.
+    const safePlan = subscribedPlan === "developer" ? "free" : subscribedPlan;
+    return entitlementsForPlan(isPaidSubscriptionStatus(status) && periodValid ? safePlan : "free", status, true, false);
   }
 
-  const workspace = await db.from("workspaces").select("plan_id").eq("id", workspaceId).maybeSingle();
-  return entitlementsForPlan(normalizePlan(workspace.data?.plan_id), "active", true, false);
+  // Subscription rows are created during workspace bootstrap. Never trust the
+  // legacy, workspace-editable plan_id column as an entitlement source.
+  return entitlementsForPlan("free", "active", true, false);
+}
+
+export function requiredFeatureForReleaseType(releaseType: unknown): FeatureKey | null {
+  const type = String(releaseType || "single").trim().toLowerCase();
+  if (["podcast", "podcast_episode", "audiobook"].includes(type)) return "podcast_pages";
+  if (type === "merch") return "merch_pages";
+  if (["event", "ticket_page"].includes(type)) return "event_pages";
+  if (type === "artist_bio") return "bio_pages";
+  if (type === "custom") return "custom_destinations";
+  return null;
 }
 
 export async function hasFeature(workspaceId: string, feature: FeatureKey, user?: Pick<User, "id" | "email"> | null, role?: WorkspaceRole) {
