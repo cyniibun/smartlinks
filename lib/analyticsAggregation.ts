@@ -33,6 +33,9 @@ export type AnalyticsGeoBreakdowns = {
   cityBreakdown: CityBreakdownRow[];
 };
 
+export type AnalyticsMetric = { name: string; count: number };
+export type AnalyticsTimePoint = { date: string; views: number; clicks: number; ctr: number };
+
 type SupabaseLike = {
   from: (table: string) => any;
   rpc: (fn: string, args: Record<string, unknown>) => any;
@@ -130,4 +133,59 @@ export async function getAnalyticsGeoBreakdowns(db: SupabaseLike, filters: Analy
       .filter((row: any) => row.country && row.city)
       .map((row: any) => ({ country: String(row.country), region: row.region ? String(row.region) : null, city: String(row.city), views: Number(row.views || 0) })),
   };
+}
+
+function analyticsRpcArgs(filters: AnalyticsEventFilters) {
+  return {
+    p_workspace_id: filters.workspaceId,
+    p_from: filters.from || null,
+    p_to: filters.to || null,
+    p_link_page_id: filters.linkPageId || null,
+    p_release_id: filters.releaseId || null,
+    p_artist_id: filters.artistId || null,
+    p_platform: filters.platform || null,
+    p_event_type: filters.eventType || null,
+    p_utm_source: filters.utmSource || null,
+    p_utm_campaign: filters.utmCampaign || null,
+  };
+}
+
+export async function getAnalyticsMetricBreakdown(
+  db: SupabaseLike,
+  filters: AnalyticsEventFilters,
+  dimension: "platform" | "release" | "referrer" | "utm_source" | "utm_campaign" | "device" | "browser" | "source",
+  options: { clicksOnly?: boolean; limit?: number } = {},
+): Promise<AnalyticsMetric[] | null> {
+  const { data, error } = await db.rpc("get_analytics_metric_breakdown", {
+    ...analyticsRpcArgs(filters),
+    p_dimension: dimension,
+    p_clicks_only: Boolean(options.clicksOnly),
+    p_limit: options.limit || 10,
+  });
+  if (error) {
+    console.warn("[tone-link:analytics:metric-breakdown]", dimension, error.message);
+    return null;
+  }
+  return (Array.isArray(data) ? data : []).map((row: any) => ({ name: String(row.name || "Unknown"), count: Number(row.count || 0) }));
+}
+
+export async function getAnalyticsTimeSeries(
+  db: SupabaseLike,
+  filters: AnalyticsEventFilters,
+  timezone: string,
+): Promise<AnalyticsTimePoint[] | null> {
+  const { data, error } = await db.rpc("get_analytics_timeseries", {
+    ...analyticsRpcArgs(filters),
+    p_timezone: timezone,
+  });
+  if (error) {
+    console.warn("[tone-link:analytics:timeseries]", error.message);
+    return null;
+  }
+  return (Array.isArray(data) ? data : []).map((row: any) => ({
+    date: String(row.date),
+    views: Number(row.views || 0),
+    clicks: Number(row.clicks || 0),
+    ctr: Number(row.ctr || 0),
+  }));
 }

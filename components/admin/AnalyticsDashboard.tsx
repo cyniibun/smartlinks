@@ -2,12 +2,18 @@
 
 import type { FocusEvent, MouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { WorldCountryMap, getCountryName } from "@/components/analytics/WorldCountryMap";
+import dynamic from "next/dynamic";
+import { getCountryName } from "@/lib/countries";
 import { AsyncError } from "@/components/admin/AsyncError";
 import { formatWorkspaceDate } from "@/lib/timezone";
 import { displayUtmCampaign, displayUtmMedium, displayUtmSource } from "@/lib/utm";
 import { displayEventType, displayPlatformName, eventBadgeClass } from "@/lib/activityDisplay";
 import { FiEye, FiMousePointer, FiTarget, FiTrendingUp, FiUsers } from "react-icons/fi";
+
+const WorldCountryMap = dynamic(() => import("@/components/analytics/WorldCountryMap").then((module) => module.WorldCountryMap), {
+  loading: () => <span className="skeleton skeleton-chart" aria-label="Loading country map" />,
+  ssr: false,
+});
 
 type Option = { id: string; name?: string; title?: string; slug?: string };
 type Metric = { name: string; count: number };
@@ -34,6 +40,11 @@ function KpiSkeleton() {
 
 function BreakdownSkeleton() {
   return <div className="analytics-grid">{Array.from({ length: 7 }).map((_, i) => <section className={`admin-panel metric-panel ${i === 0 ? "full-chart" : ""}`} key={i}><span className="skeleton skeleton-line short" /><span className="skeleton skeleton-chart" />{Array.from({ length: 3 }).map((__, row) => <span className="skeleton skeleton-line" key={row} />)}</section>)}</div>;
+}
+
+function SecondaryBreakdownSkeleton({ embedded = false }: { embedded?: boolean }) {
+  const cards = Array.from({ length: 5 }).map((_, i) => <section className="admin-panel metric-panel" key={i}><span className="skeleton skeleton-line short" /><span className="skeleton skeleton-chart" />{Array.from({ length: 3 }).map((__, row) => <span className="skeleton skeleton-line" key={row} />)}</section>);
+  return embedded ? <>{cards}</> : <div className="analytics-grid">{cards}</div>;
 }
 
 function RecentSkeleton() {
@@ -211,41 +222,119 @@ function PixelSummaryPanel({ workspaceId, pixels, loading, timezone }: { workspa
 
 export function AnalyticsDashboard({ workspaceId, artistId = "", releaseId = "", linkPageId = "", artists = [], linkPages = [] }: { workspaceId?: string; artistId?: string; releaseId?: string; linkPageId?: string; artists?: Option[]; linkPages?: Option[] }) {
   const [data, setData] = useState<Analytics>(emptyAnalytics);
-  const [loadState, setLoadState] = useState<"loading" | "loaded_with_data" | "loaded_empty" | "error">("loading");
   const [summaryLoading, setSummaryLoading] = useState(true);
-  const [breakdownLoading, setBreakdownLoading] = useState(true);
+  const [primaryLoading, setPrimaryLoading] = useState(true);
+  const [secondaryLoading, setSecondaryLoading] = useState(true);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventLog, setEventLog] = useState<{ recent: RecentEvent[]; recentHasMore: boolean }>({ recent: [], recentHasMore: false });
   const [error, setError] = useState("");
   const [detail, setDetail] = useState("");
+  const [secondaryError, setSecondaryError] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
   const [filters, setFilters] = useState({ range: "7", from: "", to: "", eventType: "", platform: "", utmSource: "", utmCampaign: "", artistId, releaseId, linkPageId, recentPage: "1" });
   const [activeTab, setActiveTab] = useState<AnalyticsTab>("Overview");
   const [pixelSummaries, setPixelSummaries] = useState<PixelSummary[]>([]);
   const [pixelsLoading, setPixelsLoading] = useState(false);
-  const queryBase = useMemo(() => { const q = new URLSearchParams(); if (workspaceId) q.set("workspaceId", workspaceId); q.set("range", filters.range); if (filters.range === "custom") { if (filters.from) q.set("from", new Date(`${filters.from}T00:00:00`).toISOString()); if (filters.to) q.set("to", new Date(`${filters.to}T23:59:59`).toISOString()); } q.set("recentPage", filters.recentPage); q.set("recentLimit", "50"); q.set("limit", "1000"); Object.entries(filters).forEach(([k, v]) => { if (v && !["range", "from", "to", "recentPage"].includes(k)) q.set(k, v); }); return q; }, [workspaceId, filters]);
-  const buildQuery = (summary = false) => { const q = new URLSearchParams(queryBase); if (summary) q.set("summary", "1"); return q; };
-  const hasMeaningfulData = (next: Analytics) => Boolean(next.summary.visits || next.summary.clicks || next.timeSeries.some((point) => point.views || point.clicks) || next.recent.length);
-  const load = () => {
-    setLoadState("loading"); setSummaryLoading(true); setBreakdownLoading(true); setError(""); setDetail("");
-    fetch(`/api/admin/analytics?${buildQuery(true)}`).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error || `Analytics summary failed (${r.status})`); setData((current) => ({ ...current, ...j })); setSummaryLoading(false); return fetch(`/api/admin/analytics?${buildQuery(false)}`); }).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error || `Analytics breakdown failed (${r.status})`); setData(j); setLoadState(hasMeaningfulData(j) ? "loaded_with_data" : "loaded_empty"); }).catch((e) => { setLoadState("error"); setError("Unable to load analytics."); setDetail(e instanceof Error ? e.message : "Analytics request failed."); }).finally(() => { setSummaryLoading(false); setBreakdownLoading(false); });
-  };
-  useEffect(load, [queryBase]);
+  const responseCache = useRef(new Map<string, { at: number; payload: any }>());
+  const mainRequestGeneration = useRef(0);
+  const eventRequestGeneration = useRef(0);
+  const pixelRequestGeneration = useRef(0);
+  const queryBase = useMemo(() => { const q = new URLSearchParams(); if (workspaceId) q.set("workspaceId", workspaceId); q.set("range", filters.range); if (filters.range === "custom") { if (filters.from) q.set("from", new Date(`${filters.from}T00:00:00`).toISOString()); if (filters.to) q.set("to", new Date(`${filters.to}T23:59:59`).toISOString()); } Object.entries(filters).forEach(([k, v]) => { if (v && !["range", "from", "to", "recentPage"].includes(k)) q.set(k, v); }); return q; }, [workspaceId, filters.range, filters.from, filters.to, filters.eventType, filters.platform, filters.utmSource, filters.utmCampaign, filters.artistId, filters.releaseId, filters.linkPageId]);
+  useEffect(() => {
+    const generation = ++mainRequestGeneration.current;
+    const isCurrent = () => mainRequestGeneration.current === generation;
+    const controller = new AbortController();
+    let secondaryTimer = 0;
+    const sectionUrl = (section: string) => { const q = new URLSearchParams(queryBase); q.set("section", section); return `/api/admin/analytics?${q}`; };
+    const parse = async (response: Response, label: string) => { const payload = await response.json(); if (!response.ok) throw new Error(payload.error || `${label} failed (${response.status})`); return payload; };
+    const fetchSection = async (section: string, label: string) => {
+      const url = sectionUrl(section);
+      const cached = responseCache.current.get(url);
+      if (cached && Date.now() - cached.at < 30_000) return cached.payload;
+      const payload = await parse(await fetch(url, { signal: controller.signal }), label);
+      responseCache.current.set(url, { at: Date.now(), payload });
+      return payload;
+    };
+    const merge = (payload: Partial<Analytics>) => { if (isCurrent()) setData((current) => ({ ...current, ...payload, summary: payload.summary || current.summary })); };
+    setData(emptyAnalytics); setSummaryLoading(true); setPrimaryLoading(true); setSecondaryLoading(true); setError(""); setDetail(""); setSecondaryError("");
+
+    const summaryRequest = fetchSection("summary", "Analytics summary")
+      .then(merge)
+      .catch((reason) => { if (isCurrent() && reason?.name !== "AbortError") { setError("Unable to load analytics summary."); setDetail(reason instanceof Error ? reason.message : "Analytics summary failed."); } })
+      .finally(() => { if (isCurrent()) setSummaryLoading(false); });
+
+    fetchSection("primary", "Analytics charts")
+      .then(merge)
+      .catch((reason) => { if (isCurrent() && reason?.name !== "AbortError") { setError("Unable to load analytics charts."); setDetail(reason instanceof Error ? reason.message : "Analytics chart request failed."); } })
+      .finally(() => { if (isCurrent()) setPrimaryLoading(false); });
+
+    void summaryRequest.finally(() => {
+      secondaryTimer = window.setTimeout(() => {
+        if (!isCurrent()) return;
+        fetchSection("secondary", "Analytics details")
+          .then(merge)
+          .catch((reason) => { if (isCurrent() && reason?.name !== "AbortError") setSecondaryError(reason instanceof Error ? reason.message : "Secondary analytics failed."); })
+          .finally(() => { if (isCurrent()) setSecondaryLoading(false); });
+      }, 0);
+    });
+    return () => { controller.abort(); window.clearTimeout(secondaryTimer); if (isCurrent()) mainRequestGeneration.current += 1; };
+  }, [queryBase, reloadToken]);
+
+  useEffect(() => {
+    if (activeTab !== "Events") return;
+    const generation = ++eventRequestGeneration.current;
+    const isCurrent = () => eventRequestGeneration.current === generation;
+    const controller = new AbortController();
+    const q = new URLSearchParams(queryBase); q.set("section", "events"); q.set("recentPage", filters.recentPage); q.set("recentLimit", "50");
+    const url = `/api/admin/analytics?${q}`;
+    const cached = responseCache.current.get(url);
+    if (cached && Date.now() - cached.at < 10_000) {
+      const payload = cached.payload;
+      if (isCurrent()) {
+        setEventLog({ recent: Array.isArray(payload.recent) ? payload.recent : [], recentHasMore: Boolean(payload.recentHasMore) });
+        setEventsLoading(false);
+      }
+      return;
+    }
+    setEventsLoading(true);
+    fetch(url, { signal: controller.signal })
+      .then(async (response) => { const payload = await response.json(); if (!response.ok) throw new Error(payload.error || `Event log failed (${response.status})`); return payload; })
+      .then((payload) => { responseCache.current.set(url, { at: Date.now(), payload }); if (isCurrent()) setEventLog({ recent: Array.isArray(payload.recent) ? payload.recent : [], recentHasMore: Boolean(payload.recentHasMore) }); })
+      .catch((reason) => { if (isCurrent() && reason?.name !== "AbortError") setSecondaryError(reason instanceof Error ? reason.message : "Event log failed."); })
+      .finally(() => { if (isCurrent()) setEventsLoading(false); });
+    return () => { controller.abort(); if (isCurrent()) eventRequestGeneration.current += 1; };
+  }, [activeTab, queryBase, filters.recentPage]);
   useEffect(() => {
     if (activeTab !== "Pixels" || !workspaceId) return;
+    const generation = ++pixelRequestGeneration.current;
+    const isCurrent = () => pixelRequestGeneration.current === generation;
+    const controller = new AbortController();
     const q = new URLSearchParams();
     q.set("workspaceId", workspaceId);
     if (filters.range === "custom") {
       if (filters.from) q.set("from", new Date(`${filters.from}T00:00:00`).toISOString());
       if (filters.to) q.set("to", new Date(`${filters.to}T23:59:59`).toISOString());
     }
+    const url = `/api/admin/pixel-deliveries?${q}`;
+    const cached = responseCache.current.get(url);
+    if (cached && Date.now() - cached.at < 30_000) {
+      if (isCurrent()) {
+        setPixelSummaries(Array.isArray(cached.payload.summary) ? cached.payload.summary : []);
+        setPixelsLoading(false);
+      }
+      return;
+    }
     setPixelsLoading(true);
-    fetch(`/api/admin/pixel-deliveries?${q}`)
+    fetch(url, { signal: controller.signal })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`Pixel status failed (${response.status})`)))
-      .then((payload) => setPixelSummaries(Array.isArray(payload.summary) ? payload.summary : []))
-      .catch(() => setPixelSummaries([]))
-      .finally(() => setPixelsLoading(false));
+      .then((payload) => { responseCache.current.set(url, { at: Date.now(), payload }); if (isCurrent()) setPixelSummaries(Array.isArray(payload.summary) ? payload.summary : []); })
+      .catch((reason) => { if (isCurrent() && reason?.name !== "AbortError") setPixelSummaries([]); })
+      .finally(() => { if (isCurrent()) setPixelsLoading(false); });
+    return () => { controller.abort(); if (isCurrent()) pixelRequestGeneration.current += 1; };
   }, [activeTab, workspaceId, filters.range, filters.from, filters.to]);
   const exportHref = `/api/admin/analytics?${new URLSearchParams([...queryBase.entries(), ["export", "csv"]])}`;
   const updateFilter = (patch: Partial<typeof filters>) => setFilters((current) => ({ ...current, ...patch, recentPage: patch.recentPage || "1" }));
-  const loaded = loadState === "loaded_with_data" || loadState === "loaded_empty";
+  const loaded = !primaryLoading;
   const ctr = data.summary.visits ? Math.round(data.summary.clicks / data.summary.visits * 100) : null;
   const visitorBehavior = data.visitorBehavior;
   const uniqueListeners = visitorBehavior?.uniqueVisitors === null || visitorBehavior?.uniqueVisitors === undefined ? "—" : formatCount(visitorBehavior.uniqueVisitors);
@@ -254,6 +343,10 @@ export function AnalyticsDashboard({ workspaceId, artistId = "", releaseId = "",
   const regionMetrics = (data.regionBreakdown || []).map((item) => ({ name: [item.region, item.country].filter(Boolean).join(", "), count: item.views }));
   const cityMetrics = (data.cityBreakdown || []).map((item) => ({ name: [item.city, item.region, item.country].filter(Boolean).join(", "), count: item.views }));
   const tabGrid = () => {
+    if (activeTab === "Events") return eventsLoading ? <RecentSkeleton /> : <EventLog data={{ ...data, recent: eventLog.recent, recentHasMore: eventLog.recentHasMore }} filters={filters} updateFilter={updateFilter} />;
+    if (activeTab === "Pixels") return <div className="analytics-grid analytics-v2-grid"><PixelSummaryPanel workspaceId={workspaceId} pixels={pixelSummaries} loading={pixelsLoading} timezone={data.timezone} /></div>;
+    if (primaryLoading) return <BreakdownSkeleton />;
+    if (["Audience", "Campaigns", "Referrers"].includes(activeTab) && secondaryLoading) return <SecondaryBreakdownSkeleton />;
     switch (activeTab) {
       case "Audience":
         return <><div className="analytics-grid analytics-v2-grid"><InsightCard title="Visitor behavior">{visitorBehavior?.available ? <div className="visitor-metric-grid"><div><span>Unique Visitors</span><strong>{visitorBehavior.uniqueVisitors ?? "—"}</strong></div><div><span>Sessions</span><strong>{visitorBehavior.sessions ?? "—"}</strong></div><div><span>Returning Visitors</span><strong>{visitorBehavior.returningVisitors ?? "—"}</strong></div><div><span>Repeat Clickers</span><strong>{visitorBehavior.repeatClickers ?? "—"}</strong></div><div><span>Median Time to Click</span><strong>{visitorBehavior.medianTimeToClickSeconds === null ? "—" : `${Math.round(visitorBehavior.medianTimeToClickSeconds)}s`}</strong></div><div><span>Engagement Rate</span><strong>{visitorBehavior.engagementRate === null ? "—" : `${visitorBehavior.engagementRate}%`}</strong></div></div> : <div className="analytics-empty"><strong>Visitor identity metrics are collecting privately.</strong><p>Available after events include visitor_id and session_id. Historical rows without those fields are not backfilled.</p></div>}</InsightCard><CountriesCard data={data.countryBreakdown} /><Bars title="Top Regions" data={regionMetrics} emptyLabel="No region data yet" /><Bars title="Top Cities" data={cityMetrics} emptyLabel="No city data yet" /><DonutCard title="Device Breakdown" data={normalizedDevices} emptyLabel="No device data yet" /><Bars title="Browsers" data={data.browsers} /></div></>;
@@ -265,18 +358,15 @@ export function AnalyticsDashboard({ workspaceId, artistId = "", releaseId = "",
         return <div className="analytics-grid analytics-v2-grid"><DonutCard title="Top Platforms" data={data.byPlatform} emptyLabel="No platform clicks yet" /><Bars title="Platform Clicks" data={data.byPlatform} emptyLabel="No platform clicks yet" formatName={(name)=>displayPlatformName(name,name)} /><TimeSeriesChart data={data.timeSeries} workspaceId={workspaceId} loaded={loaded} /></div>;
       case "Referrers":
         return <div className="analytics-grid analytics-v2-grid"><Bars title="Top Referrers" data={data.referrers.map((item) => ({ ...item, name: item.name || "Direct" }))} emptyLabel="No referrers yet" /><Bars title="UTM Sources" data={data.utmSources} emptyLabel="No UTM sources yet" /><Bars title="UTM Campaigns" data={data.campaigns} emptyLabel="No UTM campaigns yet" /></div>;
-      case "Events":
-        return <EventLog data={data} filters={filters} updateFilter={updateFilter} />;
-      case "Pixels":
-        return <div className="analytics-grid analytics-v2-grid"><PixelSummaryPanel workspaceId={workspaceId} pixels={pixelSummaries} loading={pixelsLoading} timezone={data.timezone} /></div>;
       default:
-        return <><div className="analytics-grid analytics-v2-grid"><TimeSeriesChart data={data.timeSeries} workspaceId={workspaceId} loaded={loaded} /><DonutCard title="Top Platforms" data={data.byPlatform} emptyLabel="No platform clicks yet" /><CountriesCard data={data.countryBreakdown} /><Bars title="Top Referrers" data={data.referrers.map((item) => ({ ...item, name: item.name || "Direct" }))} emptyLabel="No referrers yet" /><Bars title="Top Campaigns" data={data.campaigns} emptyLabel="No UTM campaigns yet" /><Bars title="Top Releases" data={data.bySong} /><Bars title="UTM Sources" data={data.utmSources} emptyLabel="No UTM sources yet" /><DonutCard title="Device Breakdown" data={normalizedDevices} emptyLabel="No device data yet" /><Bars title="Browsers" data={data.browsers} /></div><RecentClicks data={data} /></>;
+        return <><div className="analytics-grid analytics-v2-grid"><TimeSeriesChart data={data.timeSeries} workspaceId={workspaceId} loaded={loaded} /><DonutCard title="Top Platforms" data={data.byPlatform} emptyLabel="No platform clicks yet" />{secondaryLoading ? <SecondaryBreakdownSkeleton embedded /> : <><CountriesCard data={data.countryBreakdown} /><Bars title="Top Referrers" data={data.referrers.map((item) => ({ ...item, name: item.name || "Direct" }))} emptyLabel="No referrers yet" /><Bars title="Top Campaigns" data={data.campaigns} emptyLabel="No UTM campaigns yet" /><Bars title="Top Releases" data={data.bySong} /><Bars title="UTM Sources" data={data.utmSources} emptyLabel="No UTM sources yet" /><DonutCard title="Device Breakdown" data={normalizedDevices} emptyLabel="No device data yet" /><Bars title="Browsers" data={data.browsers} /></>}</div>{secondaryLoading ? <RecentSkeleton /> : <RecentClicks data={data} />}</>;
     }
   };
-  return <main className="admin-main analytics-page analytics-v2"><div className="admin-title-row analytics-v2-header"><div><h1>Analytics</h1><p>Deep insights into your audience, clicks, and campaigns.</p></div><div className="editor-actions"><select className="analytics-header-range" value={filters.range} onChange={(e) => updateFilter({ range: e.target.value })}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7">Last 7 days</option><option value="28">Last 28 days</option><option value="90">Last 90 days</option><option value="all">All time</option><option value="custom">Custom</option></select><button className="admin-secondary" type="button" disabled>Share</button>{data.canExport ? <a className="admin-primary" href={exportHref}>Export</a> : <button className="admin-primary" disabled title="CSV event-log export is available on upgraded plans.">Export</button>}</div></div><AnalyticsTabs activeTab={activeTab} onChange={setActiveTab} />{error && <AsyncError message={error} detail={detail} onRetry={load} />}
+  const retry=()=>{responseCache.current.clear();setReloadToken((value)=>value+1)};
+  return <main className="admin-main analytics-page analytics-v2"><div className="admin-title-row analytics-v2-header"><div><h1>Analytics</h1><p>Deep insights into your audience, clicks, and campaigns.</p></div><div className="editor-actions"><select className="analytics-header-range" value={filters.range} onChange={(e) => updateFilter({ range: e.target.value })}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7">Last 7 days</option><option value="28">Last 28 days</option><option value="90">Last 90 days</option><option value="all">All time</option><option value="custom">Custom</option></select><button className="admin-secondary" type="button" disabled>Share</button>{data.canExport ? <a className="admin-primary" href={exportHref}>Export</a> : <button className="admin-primary" disabled title="CSV event-log export is available on upgraded plans.">Export</button>}</div></div><AnalyticsTabs activeTab={activeTab} onChange={setActiveTab} />{error && <AsyncError message={error} detail={detail} onRetry={retry} />}{secondaryError&&<AsyncError message="Some secondary analytics could not load." detail={secondaryError} onRetry={retry}/>}
     <section className="admin-panel analytics-filters"><select value={filters.range} onChange={(e) => updateFilter({ range: e.target.value })}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="7">Last 7 days</option><option value="28">Last 28 days</option><option value="90">Last 90 days</option><option value="all">All time</option><option value="custom">Custom</option></select>{filters.range === "custom" && <><input type="date" value={filters.from} onChange={(e) => updateFilter({ from: e.target.value })} /><input type="date" value={filters.to} onChange={(e) => updateFilter({ to: e.target.value })} /></>}<select value={filters.artistId} onChange={(e) => updateFilter({ artistId: e.target.value })}><option value="">All artists</option>{artists.map((artist) => <option key={artist.id} value={artist.id}>{artist.name}</option>)}</select><select value={filters.linkPageId} onChange={(e) => updateFilter({ linkPageId: e.target.value })}><option value="">All releases</option>{linkPages.map((page) => <option key={page.id} value={page.id}>{page.title || page.slug}</option>)}</select><input placeholder="Platform" value={filters.platform} onChange={(e) => updateFilter({ platform: e.target.value })} /><select value={filters.eventType} onChange={(e) => updateFilter({ eventType: e.target.value })}><option value="">All events</option>{eventTypes.map((v) => <option key={v} value={v}>{displayEventType(v)}</option>)}</select><input placeholder="UTM source" value={filters.utmSource} onChange={(e) => updateFilter({ utmSource: e.target.value })} /><input placeholder="UTM campaign" value={filters.utmCampaign} onChange={(e) => updateFilter({ utmCampaign: e.target.value })} /></section>
     {data.retentionLimited && <div className="admin-alert">This workspace is on the {data.planId || "free"} plan. {data.retentionDays ? `Analytics are limited to ${data.retentionDays} days.` : "Custom/all-time reporting is locked."} Upgrade to unlock the selected range.</div>}
     {summaryLoading ? <KpiSkeleton /> : <div className="analytics-kpi-grid"><KpiCard label="Link Views" value={formatCount(data.summary.visits)} caption="Selected range" data={data.timeSeries} icon={<FiEye />} /><KpiCard label="Total Clicks" value={formatCount(data.summary.clicks)} caption="Outbound platform clicks" data={data.timeSeries.map((point) => ({ ...point, views: point.clicks }))} icon={<FiMousePointer />} /><KpiCard label="CTR" value={ctr === null ? "—" : `${ctr}%`} caption="Clicks divided by views" data={data.timeSeries.map((point) => ({ ...point, views: point.ctr }))} icon={<FiTrendingUp />} /><KpiCard label="Unique Listeners" value={uniqueListeners} caption={visitorBehavior?.available ? "Distinct anonymous visitors" : "Available from visitor identity"} data={[]} icon={<FiUsers />} /><KpiCard label="Conversion Rate" value={conversionRate} caption="Current CTR proxy" data={data.timeSeries.map((point) => ({ ...point, views: point.ctr }))} icon={<FiTarget />} /></div>}
-    {breakdownLoading ? <><BreakdownSkeleton /><RecentSkeleton /></> : tabGrid()}
+    {tabGrid()}
   </main>;
 }

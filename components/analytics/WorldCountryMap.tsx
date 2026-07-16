@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
+import { getCountryName, normalizeCountryCode } from "@/lib/countries";
 
 type CountryValue = {
   countryCode: string;
@@ -10,18 +11,6 @@ type CountryValue = {
 };
 
 const TOPOLOGY_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
-
-const countryNames: Record<string, string> = {
-  US: "United States",
-  CA: "Canada",
-  GB: "United Kingdom",
-  UK: "United Kingdom",
-  AU: "Australia",
-  DE: "Germany",
-  FR: "France",
-  BR: "Brazil",
-  MX: "Mexico",
-};
 
 const numericToIso2: Record<string, string> = {
   "036": "AU",
@@ -33,17 +22,6 @@ const numericToIso2: Record<string, string> = {
   "826": "GB",
   "840": "US",
 };
-
-function normalizeCountryCode(value: string) {
-  const code = String(value || "").trim().toUpperCase();
-  if (code === "UK") return "GB";
-  return code;
-}
-
-export function getCountryName(value: string) {
-  const code = normalizeCountryCode(value);
-  return countryNames[code] || code || "Unknown";
-}
 
 function getGeoIso2(geography: Record<string, any>) {
   const properties = geography.properties || {};
