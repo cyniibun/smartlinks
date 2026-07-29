@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const next = request.nextUrl.searchParams.get("next");
+  const legalVersion = request.nextUrl.searchParams.get("legal");
   const providerError = request.nextUrl.searchParams.get("error") || request.nextUrl.searchParams.get("error_description");
   console.info("[tone-link:auth-callback:debug]", {
     pathname: request.nextUrl.pathname,
@@ -28,6 +29,11 @@ export async function GET(request: NextRequest) {
   console.info("[tone-link:auth-callback:exchange-success]", { hasUser: Boolean(data.session.user?.id) });
   const user = data.session.user;
   if (!user.email) return NextResponse.redirect(new URL("/login?error=missing-email", request.url));
+  if (legalVersion === "2026-07-21") {
+    const acceptedAt = new Date().toISOString();
+    const { error: consentError } = await supabase.auth.updateUser({ data: { terms_accepted_at: acceptedAt, terms_version: legalVersion, privacy_acknowledged_at: acceptedAt, privacy_version: legalVersion } });
+    if (consentError) console.warn("[tone-link:auth-callback:legal-consent]", consentError.message);
+  }
   if (!user.email_confirmed_at) return NextResponse.redirect(new URL(`/check-email?email=${encodeURIComponent(user.email)}`, request.url));
   let workspaceId = "";
   try {

@@ -10,19 +10,22 @@ export async function POST(request: Request) {
   const email = String(form.get("email") || "").trim();
   const password = String(form.get("password") || "");
   const confirmPassword = String(form.get("confirmPassword") || "");
+  const acceptedLegal = String(form.get("acceptedLegal") || "") === "yes";
   const fullName = String(form.get("fullName") || "").trim();
   const honeypot = String(form.get("company") || "").trim();
   const supabase = getSupabasePublic();
   if (honeypot) return NextResponse.redirect(new URL("/check-email", request.url), 303);
+  if (!acceptedLegal) return NextResponse.redirect(new URL("/signup?error=legal-consent-required", request.url), 303);
   if (password !== confirmPassword) return NextResponse.redirect(new URL("/signup?error=passwords-do-not-match", request.url), 303);
   const rateKey = `signup:${getClientIp(request)}:${email.toLowerCase()}`;
   if (!checkRateLimit(request, rateKey, 5)) return NextResponse.redirect(new URL("/signup?error=too-many-attempts", request.url), 303);
   if (!supabase) return NextResponse.redirect(new URL("/signup?error=not-configured", request.url), 303);
   const siteUrl = getSiteUrl(request);
+  const acceptedAt = new Date().toISOString();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName }, emailRedirectTo: `${siteUrl}/auth/callback` },
+    options: { data: { full_name: fullName, terms_accepted_at: acceptedAt, terms_version: "2026-07-21", privacy_acknowledged_at: acceptedAt, privacy_version: "2026-07-21" }, emailRedirectTo: `${siteUrl}/auth/callback` },
   });
   if (error || !data.user) return NextResponse.redirect(new URL(`/signup?error=${encodeURIComponent(error?.message || "signup-failed")}`, request.url), 303);
   if (!data.session || !data.user.email_confirmed_at) return NextResponse.redirect(new URL(`/check-email?email=${encodeURIComponent(email)}`, request.url), 303);

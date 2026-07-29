@@ -11,6 +11,7 @@ function GoogleIcon() {
 
 export function AuthForm({ mode, error, message }: { mode: "login" | "signup"; error?: string; message?: string }) {
   const signup = mode === "signup";
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [clientError, setClientError] = useState("");
   const oauthStarted = useRef(false);
@@ -18,6 +19,7 @@ export function AuthForm({ mode, error, message }: { mode: "login" | "signup"; e
     : error === "not-configured" ? "Supabase Auth is not configured."
     : error === "passwords-do-not-match" ? "Passwords do not match."
     : error === "too-many-attempts" ? "Too many attempts. Try again shortly."
+    : error === "legal-consent-required" ? "Accept the Terms of Service and Privacy Policy to create an account."
     : error === "workspace-bootstrap-failed" ? "Account was verified, but workspace setup failed. Try again or contact support."
     : error === "missing-auth-code" ? "Google returned an incomplete sign-in response. Please try again."
     : error === "oauth-exchange-failed" ? "Google sign-in could not be completed. Please try again."
@@ -37,6 +39,10 @@ export function AuthForm({ mode, error, message }: { mode: "login" | "signup"; e
   }, []);
   const startGoogle = async () => {
     if (oauthStarted.current) return;
+    if (signup && !acceptedLegal) {
+      setClientError("Accept the Terms of Service and Privacy Policy to create an account.");
+      return;
+    }
     oauthStarted.current = true;
     setOauthLoading(true);
     setClientError("");
@@ -52,7 +58,7 @@ export function AuthForm({ mode, error, message }: { mode: "login" | "signup"; e
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${siteUrl}/auth/callback`,
+        redirectTo: `${siteUrl}/auth/callback${signup ? "?legal=2026-07-21" : ""}`,
         queryParams: { access_type: "offline", prompt: "select_account" },
       },
     });
@@ -70,13 +76,14 @@ export function AuthForm({ mode, error, message }: { mode: "login" | "signup"; e
     <label>Email<input name="email" type="email" autoComplete="email" required /></label>
     <label>Password<input name="password" type="password" minLength={8} autoComplete={signup ? "new-password" : "current-password"} required /></label>
     {signup && <label>Confirm password<input name="confirmPassword" type="password" minLength={8} autoComplete="new-password" required /></label>}
+    {signup && <label className="auth-legal-consent"><input name="acceptedLegal" type="checkbox" value="yes" checked={acceptedLegal} onChange={(event) => setAcceptedLegal(event.target.checked)} required /><span>I agree to the <a href="https://tone-link.com/terms" target="_blank" rel="noreferrer">Terms of Service</a> and acknowledge the <a href="https://tone-link.com/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span></label>}
     {friendlyError && <p className="form-error">{friendlyError}</p>}
     {message === "check-email" && <div className="admin-alert">Check your email to confirm your account, then sign in.</div>}
     {message === "email-confirmed" && <div className="admin-alert">Email confirmed. Sign in to open your workspace.</div>}
     <button className="admin-primary">{signup ? "Create account" : "Sign in"}</button>
     </form>
     <div className="auth-divider"><span>or</span></div>
-    <button type="button" className="admin-secondary auth-social-button" disabled={oauthLoading} onClick={() => void startGoogle()}><GoogleIcon />{oauthLoading ? "Opening Google…" : "Continue with Google"}</button>
+    <button type="button" className="admin-secondary auth-social-button" disabled={oauthLoading || (signup && !acceptedLegal)} onClick={() => void startGoogle()}><GoogleIcon />{oauthLoading ? "Opening Google…" : "Continue with Google"}</button>
     {!signup&&<p><Link href="/forgot-password">Forgot your password?</Link></p>}
     <p>{signup ? "Already have an account?" : "New to tone-link?"} <Link href={signup ? "/login" : "/signup"}>{signup ? "Sign in" : "Create one"}</Link></p>
     {signup&&<p><Link href="/">Back to home</Link></p>}
