@@ -3,18 +3,15 @@ import { getWorkspaceContext } from "@/lib/adminAuth";
 import { logApiError } from "@/lib/apiSecurity";
 import {
   ANALYTICS_STANDARD_EVENT_TYPES,
+  analyticsViewFilters,
   applyAnalyticsEventFilters,
   getAnalyticsGeoBreakdowns,
   getAnalyticsMetricBreakdown,
   getAnalyticsSummaryCounts,
   getAnalyticsTimeSeries,
-  isAnalyticsClickEvent,
-  isAnalyticsViewEvent,
   type AnalyticsEventFilters,
-  type AnalyticsMetric,
-  type AnalyticsTimePoint,
 } from "@/lib/analyticsAggregation";
-import { getReferrerBreakdown, getReferrerDomain, getUtmCampaignBreakdown, getUtmSourceBreakdown, groupAnalyticsEvents, type AnalyticsEventRow } from "@/lib/analyticsBreakdowns";
+import { getReferrerDomain, type AnalyticsEventRow } from "@/lib/analyticsBreakdowns";
 import { getWorkspaceEntitlements } from "@/lib/entitlements";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { DEFAULT_WORKSPACE_TIMEZONE, getWorkspaceDateRange } from "@/lib/timezone";
@@ -23,7 +20,7 @@ import { getVisitorBehaviorMetrics } from "@/lib/visitorBehavior";
 
 const csvEscape = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
 const analyticsJson = (body: unknown, init?: ResponseInit) => NextResponse.json(body, { ...init, headers: { "cache-control": "no-store", ...(init?.headers || {}) } });
-const dayKey = (value: string, timezone: string) => new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+const VISIBLE_EVENT_TYPES = ["page_view", "view_content", "platform_click"];
 
 type AnalyticsSection = "summary" | "primary" | "secondary" | "events" | "legacy";
 
@@ -35,38 +32,6 @@ function normalizeEvent(event: AnalyticsEventRow): AnalyticsEventRow {
     utm_campaign: normalizeUtmValue(event.utm_campaign),
     utm_content: normalizeUtmValue(event.utm_content),
     utm_term: normalizeUtmValue(event.utm_term),
-  };
-}
-
-function fallbackTimeSeries(events: AnalyticsEventRow[], timezone: string): AnalyticsTimePoint[] {
-  const rows = new Map<string, AnalyticsTimePoint>();
-  for (const event of events) {
-    const key = dayKey(event.created_at, timezone);
-    const row = rows.get(key) || { date: key, views: 0, clicks: 0, ctr: 0 };
-    if (isAnalyticsViewEvent(event.event_type)) row.views++;
-    if (isAnalyticsClickEvent(event.event_type)) row.clicks++;
-    row.ctr = row.views ? Math.round(row.clicks / row.views * 100) : 0;
-    rows.set(key, row);
-  }
-  return [...rows.values()].sort((a, b) => a.date.localeCompare(b.date));
-}
-
-function fallbackPrimary(events: AnalyticsEventRow[], timezone: string) {
-  const clicks = events.filter((event) => isAnalyticsClickEvent(event.event_type));
-  return {
-    byPlatform: groupAnalyticsEvents(clicks, (event) => event.platform || "Unknown").slice(0, 10),
-    bySong: groupAnalyticsEvents(clicks, (event) => event.link_pages?.title || event.releases?.title || event.songs?.title || "Unknown").slice(0, 10),
-    timeSeries: fallbackTimeSeries(events, timezone),
-  };
-}
-
-function fallbackSecondary(events: AnalyticsEventRow[]) {
-  return {
-    referrers: getReferrerBreakdown(events),
-    utmSources: getUtmSourceBreakdown(events),
-    campaigns: getUtmCampaignBreakdown(events),
-    devices: groupAnalyticsEvents(events, (event) => event.device_type || (/mobile|android|iphone/i.test(event.user_agent || "") ? "Mobile" : "Desktop")).slice(0, 10),
-    browsers: groupAnalyticsEvents(events, (event) => event.browser || "Unknown").slice(0, 10),
   };
 }
 
@@ -109,12 +74,13 @@ export async function GET(request: Request) {
   };
   const baseMeta = { timezone, planId, retentionDays, canExport: entitlements.features.analytics_export, lockedRange, eventTypes: ANALYTICS_STANDARD_EVENT_TYPES, retentionLimited: Boolean(lockedRange || (retentionFloor && requestedFrom && requestedFrom < retentionFloor)), configured: true };
 
-  const fetchEvents = async (eventFilters: AnalyticsEventFilters, limit: number, offset = 0) => {
+  const fetchEvents = async (eventFilters: AnalyticsEventFilters, limit: number, offset = 0, allowedEventTypes?: string[]) => {
     let query = (supabase.from("click_events") as any)
       .select("id,event_type,platform,created_at,utm_source,utm_medium,utm_campaign,utm_content,utm_term,device_type,browser,user_agent,country,referrer,normalized_referrer,songs(title,slug),releases(title),link_pages(title,slug)")
       .order("created_at", { ascending: false })
       .range(offset, offset + limit);
     query = applyAnalyticsEventFilters(query, eventFilters);
+    if (!eventFilters.eventType && allowedEventTypes?.length) query = query.in("event_type", allowedEventTypes);
     const result = await query;
     if (result.error) throw new Error(result.error.message);
     return ((result.data || []) as AnalyticsEventRow[]).map(normalizeEvent);
@@ -135,42 +101,37 @@ export async function GET(request: Request) {
 
     const loadPrimary = async () => {
       const [byPlatform, bySong, timeSeries] = await Promise.all([
-        getAnalyticsMetricBreakdown(supabase, filters, "platform", { clicksOnly: true }),
-        getAnalyticsMetricBreakdown(supabase, filters, "release", { clicksOnly: true }),
+        getAnalyticsMetricBreakdown(supabase, filters, "platform", { population: "clicks", limit: 100 }),
+        getAnalyticsMetricBreakdown(supabase, filters, "release", { population: "clicks", limit: 100 }),
         getAnalyticsTimeSeries(supabase, filters, timezone),
       ]);
-      if (byPlatform && bySong && timeSeries) return { byPlatform, bySong, timeSeries, aggregateSource: "database" as const };
-      const events = (await fetchEvents(filters, 1000)).slice(0, 1000);
-      return { ...fallbackPrimary(events, timezone), aggregateSource: "fallback" as const };
+      if (!byPlatform || !bySong || !timeSeries) throw new Error("Analytics integrity migration 20260818 is required.");
+      return { byPlatform, bySong, timeSeries, aggregateSource: "database" as const };
     };
 
     const loadSecondary = async () => {
       const recentFilters: AnalyticsEventFilters = { ...filters, eventType: "platform_click" };
-      const shouldLoadClicks = !filters.eventType || filters.eventType === "platform_click";
-      const [referrers, utmSources, campaigns, devices, browsers, geoBreakdowns, visitorBehavior, recentRows] = await Promise.all([
-        getAnalyticsMetricBreakdown(supabase, filters, "referrer"),
-        getAnalyticsMetricBreakdown(supabase, filters, "utm_source"),
-        getAnalyticsMetricBreakdown(supabase, filters, "utm_campaign"),
-        getAnalyticsMetricBreakdown(supabase, filters, "device"),
-        getAnalyticsMetricBreakdown(supabase, filters, "browser"),
-        getAnalyticsGeoBreakdowns(supabase, filters),
-        getVisitorBehaviorMetrics(supabase, filters),
-        shouldLoadClicks ? fetchEvents(recentFilters, 8) : Promise.resolve([]),
+      const viewFilters = analyticsViewFilters(filters);
+      const [referrers, utmSources, campaigns, devices, browsers, campaignByPlatform, geoBreakdowns, visitorBehavior, recentRows] = await Promise.all([
+        getAnalyticsMetricBreakdown(supabase, viewFilters, "referrer", { population: "views" }),
+        getAnalyticsMetricBreakdown(supabase, viewFilters, "utm_source", { population: "views" }),
+        getAnalyticsMetricBreakdown(supabase, viewFilters, "utm_campaign", { population: "views" }),
+        getAnalyticsMetricBreakdown(supabase, viewFilters, "device", { population: "views" }),
+        getAnalyticsMetricBreakdown(supabase, viewFilters, "browser", { population: "views" }),
+        getAnalyticsMetricBreakdown(supabase, filters, "campaign_platform", { population: "clicks", limit: 100 }),
+        getAnalyticsGeoBreakdowns(supabase, viewFilters),
+        getVisitorBehaviorMetrics(supabase, viewFilters),
+        fetchEvents(recentFilters, 8),
       ]);
-      let breakdowns: { referrers: AnalyticsMetric[]; utmSources: AnalyticsMetric[]; campaigns: AnalyticsMetric[]; devices: AnalyticsMetric[]; browsers: AnalyticsMetric[]; aggregateSource: "database" | "fallback" };
-      if (referrers && utmSources && campaigns && devices && browsers) breakdowns = { referrers, utmSources, campaigns, devices, browsers, aggregateSource: "database" };
-      else {
-        const events = (await fetchEvents(filters, 1000)).slice(0, 1000);
-        breakdowns = { ...fallbackSecondary(events), aggregateSource: "fallback" };
-      }
-      return { ...breakdowns, ...geoBreakdowns, visitorBehavior, recent: recentRows.slice(0, 8).map((event) => ({ ...event, referrer: getReferrerDomain(event.referrer) })) };
+      if (!referrers || !utmSources || !campaigns || !devices || !browsers || !campaignByPlatform) throw new Error("Analytics integrity migration 20260818 is required.");
+      return { referrers, utmSources, campaigns, devices, browsers, campaignByPlatform, aggregateSource: "database" as const, ...geoBreakdowns, visitorBehavior, recent: recentRows.slice(0, 8).map((event) => ({ ...event, referrer: getReferrerDomain(event.referrer) })) };
     };
 
     if (section === "primary") return analyticsJson({ ...baseMeta, ...(await loadPrimary()) });
     if (section === "secondary") return analyticsJson({ ...baseMeta, ...(await loadSecondary()) });
     if (section === "events") {
       const offset = (recentPage - 1) * recentLimit;
-      const rows = await fetchEvents(filters, recentLimit, offset);
+      const rows = await fetchEvents(filters, recentLimit, offset, VISIBLE_EVENT_TYPES);
       return analyticsJson({ ...baseMeta, recent: rows.slice(0, recentLimit).map((event) => ({ ...event, referrer: getReferrerDomain(event.referrer) })), recentPage, recentLimit, recentHasMore: rows.length > recentLimit });
     }
 

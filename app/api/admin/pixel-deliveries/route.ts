@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getWorkspaceContext } from "@/lib/adminAuth";
 import { getWorkspaceEntitlements } from "@/lib/entitlements";
-import { isSuccessfulPixelDelivery, type PixelDeliveryRow } from "@/lib/pixelDeliveries";
+import type { PixelDeliveryRow } from "@/lib/pixelDeliveries";
 import { pixelProviders, type WorkspacePixelConfiguration } from "@/lib/pixelConfigurations";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { DEFAULT_WORKSPACE_TIMEZONE, getWorkspaceDateRange } from "@/lib/timezone";
 
 const providerNames = Object.fromEntries(pixelProviders.map((provider) => [provider.provider, provider.providerName]));
 
@@ -24,10 +25,21 @@ function pixelValueFor(row: any, provider: string) {
   return null;
 }
 
-function deliveryMatches(delivery: PixelDeliveryRow, config: WorkspacePixelConfiguration) {
-  if (delivery.provider !== config.provider) return false;
-  if (delivery.pixel_connection_id === config.id) return true;
-  return Boolean(config.pixel_id && delivery.pixel_id === config.pixel_id);
+type PixelDeliverySummaryRow = {
+  pixel_connection_id: string | null;
+  provider: string;
+  pixel_id: string | null;
+  successful_count: number | string;
+  failed_count: number | string;
+  last_successful: string | null;
+  last_attempted: string | null;
+  last_acknowledged: string | null;
+};
+
+function summaryMatches(summary: PixelDeliverySummaryRow, config: WorkspacePixelConfiguration) {
+  if (summary.provider !== config.provider) return false;
+  if (summary.pixel_connection_id === config.id) return true;
+  return Boolean(config.pixel_id && summary.pixel_id === config.pixel_id);
 }
 
 export async function GET(request: Request) {
@@ -42,8 +54,7 @@ export async function GET(request: Request) {
   const workspaceId = context.workspace.id;
   const page = Math.max(Number(params.get("page") || "1") || 1, 1);
   const pageSize = Math.min(Math.max(Number(params.get("pageSize") || "50") || 50, 10), 100);
-  const from = params.get("from");
-  const to = params.get("to");
+  const selectedRange = params.get("range") || "7";
   const providerFilter = params.get("provider");
   const canUseAdvancedPixels = entitlements.features.advanced_pixels || entitlements.developer;
   if (providerFilter && ["snapchat", "custom"].includes(providerFilter) && !canUseAdvancedPixels) {
@@ -54,11 +65,16 @@ export async function GET(request: Request) {
   const eventNameFilter = params.get("eventType");
   const offset = (page - 1) * pageSize;
 
-  const [configs, artists, linkPages] = await Promise.all([
+  const [configs, artists, linkPages, workspaceResult] = await Promise.all([
     db.from("workspace_pixel_configurations").select("id,workspace_id,provider,name,pixel_id,status,health,is_default,last_event_at,last_verified_at").eq("workspace_id", workspaceId).neq("status", "disconnected").order("provider"),
     db.from("artists").select("default_tiktok_pixel_id,default_meta_pixel_id,default_ga_measurement_id").eq("workspace_id", workspaceId).limit(500),
     db.from("link_pages").select("id,title,artist_display_name,tiktok_pixel_id,meta_pixel_id,ga_measurement_id").eq("workspace_id", workspaceId).limit(1000),
+    db.from("workspaces").select("timezone,default_timezone").eq("id", workspaceId).maybeSingle(),
   ]);
+  const timezone = String(workspaceResult.data?.timezone || workspaceResult.data?.default_timezone || DEFAULT_WORKSPACE_TIMEZONE);
+  const resolvedRange = selectedRange === "custom" ? {} : getWorkspaceDateRange(selectedRange, timezone);
+  const from = params.get("from") || resolvedRange.start || null;
+  const to = params.get("to") || resolvedRange.end || null;
 
   const configRows = ((configs.data || []) as WorkspacePixelConfiguration[]).filter((config) => canUseAdvancedPixels || !["snapchat", "custom"].includes(config.provider));
   const artistRows = artists.data || [];
@@ -85,31 +101,32 @@ export async function GET(request: Request) {
   const deliveryResult = await deliveryQuery.range(offset, offset + pageSize - 1);
   if (deliveryResult.error) return json({ error: deliveryResult.error.message }, { status: 500 });
 
-  let allForSummaryQuery = db.from("pixel_event_deliveries").select("*").eq("workspace_id", workspaceId).limit(5000);
-  if (from) allForSummaryQuery = allForSummaryQuery.gte("attempted_at", from);
-  if (to) allForSummaryQuery = allForSummaryQuery.lte("attempted_at", to);
-  if (!canUseAdvancedPixels) allForSummaryQuery = allForSummaryQuery.not("provider", "in", "(snapchat,custom)");
-  const allForSummary = await allForSummaryQuery;
-  const allDeliveries = (allForSummary.data || []) as PixelDeliveryRow[];
+  const deliverySummaryResult = await db.rpc("get_pixel_delivery_summary_v2", {
+    p_workspace_id: workspaceId,
+    p_from: from,
+    p_to: to,
+  });
+  if (deliverySummaryResult.error) return json({ error: "Pixel analytics integrity migration 20260818 is required." }, { status: 500 });
+  const deliverySummaries = (deliverySummaryResult.data || []) as PixelDeliverySummaryRow[];
 
   const summary = assignedConfigs.map((config) => {
     const artistsUsing = artistRows.filter((artist: any) => pixelValueFor(artist, config.provider) === config.pixel_id).length;
     const releasesUsing = linkRows.filter((link: any) => pixelValueFor(link, config.provider) === config.pixel_id).length;
-    const deliveries = allDeliveries.filter((delivery) => deliveryMatches(delivery, config));
-    const successful = deliveries.filter(isSuccessfulPixelDelivery);
-    const failed = deliveries.filter((delivery) => delivery.status === "failed");
-    const lastSuccessful = successful[0]?.attempted_at || null;
-    const health = failed.length >= 3 && failed.length >= successful.length ? "error" : successful.length ? "good" : "warning";
+    const deliverySummary = deliverySummaries.find((row) => summaryMatches(row, config));
+    const successfulCount = Number(deliverySummary?.successful_count || 0);
+    const failedCount = Number(deliverySummary?.failed_count || 0);
+    const lastSuccessful = deliverySummary?.last_successful || null;
+    const health = failedCount >= 3 && failedCount >= successfulCount ? "error" : successfulCount ? "good" : "warning";
     return {
       id: config.id,
       provider: config.provider,
       providerName: providerNames[config.provider] || config.provider,
       name: config.name,
       safeId: compactId(config.pixel_id),
-      status: successful.length ? "Active" : config.status === "error" ? "Error" : "Warning",
+      status: successfulCount ? "Active" : config.status === "error" ? "Error" : "Warning",
       health,
       lastSuccessfulEvent: lastSuccessful,
-      events: successful.length,
+      events: successfulCount,
       assignmentScope: {
         workspaceDefault: Boolean(config.is_default),
         artists: artistsUsing,

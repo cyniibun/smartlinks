@@ -33,8 +33,9 @@ export type AnalyticsGeoBreakdowns = {
   cityBreakdown: CityBreakdownRow[];
 };
 
-export type AnalyticsMetric = { name: string; count: number };
+export type AnalyticsMetric = { id?: string; name: string; count: number };
 export type AnalyticsTimePoint = { date: string; views: number; clicks: number; ctr: number };
+export type AnalyticsMetricPopulation = "views" | "clicks" | "all";
 
 type SupabaseLike = {
   from: (table: string) => any;
@@ -66,6 +67,16 @@ export function applyAnalyticsEventFilters(query: any, filters: AnalyticsEventFi
   return next;
 }
 
+// Platform describes an outbound click destination; it is not present on a
+// normal page view. Event type is an event-log filter, not a KPI denominator.
+export function analyticsViewFilters(filters: AnalyticsEventFilters): AnalyticsEventFilters {
+  return { ...filters, platform: null, eventType: null };
+}
+
+export function analyticsClickFilters(filters: AnalyticsEventFilters): AnalyticsEventFilters {
+  return { ...filters, eventType: null };
+}
+
 async function countAnalyticsEvents(db: SupabaseLike, filters: AnalyticsEventFilters, eventTypes: readonly string[]) {
   let query = db
     .from("click_events")
@@ -78,9 +89,29 @@ async function countAnalyticsEvents(db: SupabaseLike, filters: AnalyticsEventFil
 }
 
 export async function getAnalyticsSummaryCounts(db: SupabaseLike, filters: AnalyticsEventFilters) {
+  const { data, error } = await db.rpc("get_analytics_summary_v2", {
+    p_workspace_id: filters.workspaceId,
+    p_from: filters.from || null,
+    p_to: filters.to || null,
+    p_link_page_id: filters.linkPageId || null,
+    p_release_id: filters.releaseId || null,
+    p_artist_id: filters.artistId || null,
+    p_platform: filters.platform || null,
+    p_utm_source: filters.utmSource || null,
+    p_utm_campaign: filters.utmCampaign || null,
+  });
+  if (!error) {
+    const row = Array.isArray(data) ? data[0] : data;
+    const views = Number(row?.views || 0);
+    const clicks = Number(row?.clicks || 0);
+    return { visits: views, views, clicks, ctr: views ? Math.round((clicks / views) * 100) : 0 };
+  }
+
+  // Exact-count fallback supports deployments while the v2 RPC migration is
+  // being applied. It never samples a limited raw event window.
   const [views, clicks] = await Promise.all([
-    countAnalyticsEvents(db, filters, ANALYTICS_VIEW_EVENT_TYPES),
-    countAnalyticsEvents(db, filters, ANALYTICS_CLICK_EVENT_TYPES),
+    countAnalyticsEvents(db, analyticsViewFilters(filters), ANALYTICS_VIEW_EVENT_TYPES),
+    countAnalyticsEvents(db, analyticsClickFilters(filters), ANALYTICS_CLICK_EVENT_TYPES),
   ]);
 
   return {
@@ -144,7 +175,6 @@ function analyticsRpcArgs(filters: AnalyticsEventFilters) {
     p_release_id: filters.releaseId || null,
     p_artist_id: filters.artistId || null,
     p_platform: filters.platform || null,
-    p_event_type: filters.eventType || null,
     p_utm_source: filters.utmSource || null,
     p_utm_campaign: filters.utmCampaign || null,
   };
@@ -153,20 +183,20 @@ function analyticsRpcArgs(filters: AnalyticsEventFilters) {
 export async function getAnalyticsMetricBreakdown(
   db: SupabaseLike,
   filters: AnalyticsEventFilters,
-  dimension: "platform" | "release" | "referrer" | "utm_source" | "utm_campaign" | "device" | "browser" | "source",
-  options: { clicksOnly?: boolean; limit?: number } = {},
+  dimension: "platform" | "campaign_platform" | "release" | "referrer" | "utm_source" | "utm_campaign" | "device" | "browser" | "source",
+  options: { population: AnalyticsMetricPopulation; limit?: number },
 ): Promise<AnalyticsMetric[] | null> {
-  const { data, error } = await db.rpc("get_analytics_metric_breakdown", {
+  const { data, error } = await db.rpc("get_analytics_metric_breakdown_v2", {
     ...analyticsRpcArgs(filters),
     p_dimension: dimension,
-    p_clicks_only: Boolean(options.clicksOnly),
+    p_population: options.population,
     p_limit: options.limit || 10,
   });
   if (error) {
     console.warn("[tone-link:analytics:metric-breakdown]", dimension, error.message);
     return null;
   }
-  return (Array.isArray(data) ? data : []).map((row: any) => ({ name: String(row.name || "Unknown"), count: Number(row.count || 0) }));
+  return (Array.isArray(data) ? data : []).map((row: any) => ({ id: row.metric_id ? String(row.metric_id) : undefined, name: String(row.name || "Unknown"), count: Number(row.count || 0) }));
 }
 
 export async function getAnalyticsTimeSeries(
@@ -174,7 +204,7 @@ export async function getAnalyticsTimeSeries(
   filters: AnalyticsEventFilters,
   timezone: string,
 ): Promise<AnalyticsTimePoint[] | null> {
-  const { data, error } = await db.rpc("get_analytics_timeseries", {
+  const { data, error } = await db.rpc("get_analytics_timeseries_v2", {
     ...analyticsRpcArgs(filters),
     p_timezone: timezone,
   });

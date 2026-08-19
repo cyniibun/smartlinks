@@ -18,8 +18,8 @@ export async function getWorkspaceOverview(workspaceId:string):Promise<Workspace
     db.from("link_pages").select("id,slug,title,artist_display_name,published,created_at,updated_at").eq("workspace_id",workspaceId).order("updated_at",{ascending:false}),
     getAnalyticsSummaryCounts(db,filters),
     db.rpc("get_workspace_link_metrics",{p_workspace_id:workspaceId,p_from:range.start||null,p_to:range.end||null}),
-    getAnalyticsMetricBreakdown(db,filters,"platform",{clicksOnly:true,limit:1}),
-    getAnalyticsMetricBreakdown(db,filters,"source",{limit:5}),
+    getAnalyticsMetricBreakdown(db,filters,"platform",{population:"clicks",limit:1}),
+    getAnalyticsMetricBreakdown(db,filters,"source",{population:"views",limit:5}),
     db.from("click_events").select("id,event_type,platform,referrer,utm_source,created_at,link_page_id,link_pages(title,slug)").eq("workspace_id",workspaceId).gte("created_at",range.start!).lte("created_at",range.end!).in("event_type",["page_view","view_content","platform_click"]).order("created_at",{ascending:false}).limit(8),
   ]);
   if(pagesResult.error)throw new Error(pagesResult.error.message);if(recentResult.error)throw new Error(recentResult.error.message);

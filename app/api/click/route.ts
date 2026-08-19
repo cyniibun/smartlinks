@@ -4,6 +4,17 @@ import { getGeoFromHeaders } from "@/lib/analytics/geo";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { normalizeUtmValue } from "@/lib/utm";
 
+const ACCEPTED_PUBLIC_EVENT_TYPES = new Set([
+  "page_view",
+  "view_content",
+  "page_engagement",
+  "platform_click",
+  "copy_url",
+  "share",
+  "embed_click",
+  "campaign_click",
+]);
+
 function nullableString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -17,6 +28,10 @@ function boundedDuration(value: unknown) {
 export async function POST(request: Request) {
   try {
     const event = await request.json();
+    const eventType = nullableString(event.eventType);
+    if (!eventType || !ACCEPTED_PUBLIC_EVENT_TYPES.has(eventType)) {
+      return NextResponse.json({ ok: false, error: "Unsupported analytics event type." }, { status: 400 });
+    }
     const supabase = getSupabaseAdmin();
     if (supabase) {
       const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0] || "";
@@ -31,7 +46,7 @@ export async function POST(request: Request) {
       const utmTerm = normalizeUtmValue(event.utmTerm);
       const clickIds = event.clickIds && typeof event.clickIds === "object" ? event.clickIds : {};
       const workspaceId = page?.data?.workspace_id ?? song?.data?.workspace_id ?? event.workspaceId ?? null;
-      if (event.eventType === "page_engagement") {
+      if (eventType === "page_engagement") {
         const pageViewId = nullableString(event.pageViewId ?? event.page_view_id);
         if ((!page?.data && !song?.data) || !workspaceId || !pageViewId) return NextResponse.json({ ok: false, error: "Page engagement requires a valid published page view." }, { status: 400 });
         const { error } = await supabase.rpc("record_page_engagement", {
@@ -60,7 +75,7 @@ export async function POST(request: Request) {
         song_id: song?.data?.id ?? null, workspace_id: workspaceId,
         link_page_id: page?.data?.id ?? event.linkPageId ?? null, release_id: page?.data?.release_id ?? event.releaseId ?? null,
         artist_id: page?.data?.artist_id ?? event.artistId ?? null, campaign_id: event.campaignId || null,
-        event_type: event.eventType || "click", event_name: event.eventName || null,
+        event_type: eventType, event_name: event.eventName || null,
         platform: event.platform || null, destination_url: event.destinationUrl || null,
         referrer: event.referrer || null, user_agent: event.userAgent || request.headers.get("user-agent"),
         visitor_id: nullableString(event.visitorId ?? event.visitor_id),
