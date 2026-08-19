@@ -6,3 +6,4 @@ node_modules
 *.tsbuildinfo
 .DS_Store
 /docs/
+ANALYTICS_DASHBOARD_COMPONENT_AUDIT.md
